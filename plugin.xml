@@ -2,8 +2,8 @@
 <root>
    <name>Git Plugin Installer</name>
    <key>gitplugins</key>
-   <state>unstable</state>
-   <logo>https://git.convergent.tn/fbennasr/gitplugins/raw/branch/main/pics/gitplugins_64.png</logo>
+   <state>stable</state>
+   <logo>https://raw.githubusercontent.com/FathiBenNasr/gitplugins/main/pics/gitplugins_64.png</logo>
    <gitupdate>
       <repo>https://github.com/FathiBenNasr/gitplugins.git</repo>
       <ref>main</ref>
@@ -45,7 +45,7 @@
    </authors>
    <versions>
       <version>
-         <num>0.1.0-dev</num>
+         <num>0.1.0</num>
          <compatibility>~11.0</compatibility>
       </version>
    </versions>

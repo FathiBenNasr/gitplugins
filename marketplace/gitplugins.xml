@@ -3,7 +3,7 @@
 <root>
    <name>Git Plugin Installer</name>
    <key>gitplugins</key>
-   <state>unstable</state>
+   <state>stable</state>
    <logo>https://raw.githubusercontent.com/FathiBenNasr/gitplugins/main/pics/gitplugins_64.png</logo>
    <description>
       <short>
@@ -49,9 +49,9 @@ Développé par [Convergent Cloud Computing](https://www.convergent.tn).
    </authors>
    <versions>
       <version>
-         <num>0.1.0-dev</num>
+         <num>0.1.0</num>
          <compatibility>~11.0</compatibility>
-         <download_url>https://github.com/FathiBenNasr/gitplugins/releases/download/v0.1.0-dev/gitplugins-0.1.0-dev.tgz</download_url>
+         <download_url>https://github.com/FathiBenNasr/gitplugins/releases/download/v0.1.0/gitplugins-0.1.0.tgz</download_url>
       </version>
    </versions>
    <langs>
