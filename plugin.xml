@@ -5,10 +5,10 @@
    <state>unstable</state>
    <logo>https://git.convergent.tn/fbennasr/gitplugins/raw/branch/main/pics/gitplugins_64.png</logo>
    <gitupdate>
-      <repo>https://git.convergent.tn/fbennasr/gitplugins.git</repo>
+      <repo>https://github.com/FathiBenNasr/gitplugins.git</repo>
       <ref>main</ref>
       <ref_type>branch</ref_type>
-      <provider>forgejo</provider>
+      <provider>github</provider>
       <private>false</private>
    </gitupdate>
    <description>
