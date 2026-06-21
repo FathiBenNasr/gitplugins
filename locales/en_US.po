@@ -1,0 +1,234 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Git Plugin Installer 0.1.0-dev\n"
+"Report-Msgid-Bugs-To: Convergent Cloud Computing <support@convergent.tn>\n"
+"PO-Revision-Date: 2026-06-21\n"
+"Language: en_US\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Git plugin source"
+msgid_plural "Git plugin sources"
+msgstr[0] "Git plugin source"
+msgstr[1] "Git plugin sources"
+
+msgid "Git Plugin Installer"
+msgstr "Git Plugin Installer"
+
+msgid "Git Plugin Installer requires GLPI %s or later."
+msgstr "Git Plugin Installer requires GLPI %s or later."
+
+msgid "Git Plugin Installer requires PHP 8.2 or later."
+msgstr "Git Plugin Installer requires PHP 8.2 or later."
+
+msgid "Git Plugin Installer: schema not installed — run the plugin install step."
+msgstr "Git Plugin Installer: schema not installed — run the plugin install step."
+
+msgid "Git plugin update check"
+msgstr "Git plugin update check"
+
+msgid "Check managed git sources for updates and run pending installs"
+msgstr "Check managed git sources for updates and run pending installs"
+
+msgid "Sources"
+msgstr "Sources"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Configuration"
+msgstr "Configuration"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "Plugin key"
+msgstr "Plugin key"
+
+msgid "Provider"
+msgstr "Provider"
+
+msgid "Ref policy"
+msgstr "Ref policy"
+
+msgid "Active"
+msgstr "Active"
+
+msgid "New source"
+msgstr "New source"
+
+msgid "No managed sources yet."
+msgstr "No managed sources yet."
+
+msgid "Install / Update"
+msgstr "Install / Update"
+
+msgid "Source removed from management."
+msgstr "Source removed from management."
+
+msgid "The repository URL must be an https:// URL."
+msgstr "The repository URL must be an https:// URL."
+
+msgid "A plugin key (lowercase letters, digits, underscore) is required."
+msgstr "A plugin key (lowercase letters, digits, underscore) is required."
+
+msgid "A valid ref (branch, tag or commit SHA) is required for this policy."
+msgstr "A valid ref (branch, tag or commit SHA) is required for this policy."
+
+msgid "Host \"%s\" is not in the allowed-hosts list (see Configuration)."
+msgstr "Host \"%s\" is not in the allowed-hosts list (see Configuration)."
+
+msgid "Source saved."
+msgstr "Source saved."
+
+msgid "Source created."
+msgstr "Source created."
+
+msgid "Edit source"
+msgstr "Edit source"
+
+msgid "Display name"
+msgstr "Display name"
+
+msgid "Repository URL (https only)"
+msgstr "Repository URL (https only)"
+
+msgid "Only hosts on the allow-list (Configuration) are accepted. The server fetches a tarball over HTTPS — no git binary is used."
+msgstr "Only hosts on the allow-list (Configuration) are accepted. The server fetches a tarball over HTTPS — no git binary is used."
+
+msgid "Plugin key (directory name)"
+msgstr "Plugin key (directory name)"
+
+msgid "Ref (branch / tag / SHA)"
+msgstr "Ref (branch / tag / SHA)"
+
+msgid "Private-repo token (write-only)"
+msgstr "Private-repo token (write-only)"
+
+msgid "•••••• (stored — leave blank to keep)"
+msgstr "•••••• (stored — leave blank to keep)"
+
+msgid "Remove the stored token"
+msgstr "Remove the stored token"
+
+msgid "Encrypted with GLPI's key, sent only as an Authorization header, never logged or displayed."
+msgstr "Encrypted with GLPI's key, sent only as an Authorization header, never logged or displayed."
+
+msgid "Active (checked for updates)"
+msgstr "Active (checked for updates)"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Back"
+msgstr "Back"
+
+msgid "Remove"
+msgstr "Remove"
+
+msgid "Remove this source from management? The installed plugin is NOT uninstalled."
+msgstr "Remove this source from management? The installed plugin is NOT uninstalled."
+
+msgid "Latest release tag"
+msgstr "Latest release tag"
+
+msgid "Track a branch"
+msgstr "Track a branch"
+
+msgid "Pin to a tag"
+msgstr "Pin to a tag"
+
+msgid "Pin to a commit SHA"
+msgstr "Pin to a commit SHA"
+
+msgid "Confirm install / update"
+msgstr "Confirm install / update"
+
+msgid "Installing runs the target plugin's own install code on this server. Only proceed for a source you trust."
+msgstr "Installing runs the target plugin's own install code on this server. Only proceed for a source you trust."
+
+msgid "Source URL"
+msgstr "Source URL"
+
+msgid "Resolved ref"
+msgstr "Resolved ref"
+
+msgid "Commit SHA"
+msgstr "Commit SHA"
+
+msgid "resolved at fetch"
+msgstr "resolved at fetch"
+
+msgid "Installed version"
+msgstr "Installed version"
+
+msgid "not installed"
+msgstr "not installed"
+
+msgid "Available version"
+msgstr "Available version"
+
+msgid "Queue install / update"
+msgstr "Queue install / update"
+
+msgid "Queue this install/update?"
+msgstr "Queue this install/update?"
+
+msgid "Cancel"
+msgstr "Cancel"
+
+msgid "Refused: the available version is older than the installed one (downgrade not allowed)."
+msgstr "Refused: the available version is older than the installed one (downgrade not allowed)."
+
+msgid "Already up to date — nothing to install."
+msgstr "Already up to date — nothing to install."
+
+msgid "Queued. The installer cron will fetch and install it on its next run."
+msgstr "Queued. The installer cron will fetch and install it on its next run."
+
+msgid "Git Plugin Installer configuration"
+msgstr "Git Plugin Installer configuration"
+
+msgid "Allowed hosts (one per line)"
+msgstr "Allowed hosts (one per line)"
+
+msgid "SSRF guard: the server will only fetch from these exact hosts. Add codeload.github.com for GitHub. An empty list keeps the safe defaults."
+msgstr "SSRF guard: the server will only fetch from these exact hosts. Add codeload.github.com for GitHub. An empty list keeps the safe defaults."
+
+msgid "Max download size (MB)"
+msgstr "Max download size (MB)"
+
+msgid "Fetch timeout (seconds)"
+msgstr "Fetch timeout (seconds)"
+
+msgid "Update-check frequency (minutes)"
+msgstr "Update-check frequency (minutes)"
+
+msgid "Allow automatic (unattended) install on update — leave OFF for confirm-before-install"
+msgstr "Allow automatic (unattended) install on update — leave OFF for confirm-before-install"
+
+msgid "Allow downgrading to an older version (not recommended)"
+msgstr "Allow downgrading to an older version (not recommended)"
+
+msgid "Configuration saved."
+msgstr "Configuration saved."
+
+msgid "Managed plugin status"
+msgstr "Managed plugin status"
+
+msgid "Installed"
+msgstr "Installed"
+
+msgid "Available"
+msgstr "Available"
+
+msgid "Pending"
+msgstr "Pending"
+
+msgid "Last check"
+msgstr "Last check"
+
+msgid "Last result"
+msgstr "Last result"
