@@ -245,15 +245,22 @@ $gpDetect = [
     setMsg(GP.detecting, 'text-muted');
 
     var body = new URLSearchParams();
-    body.set('_glpi_csrf_token', GP.csrf);
     body.set('url', url);
     body.set('ref', ref);
     if (cred !== '') { body.set('credential', cred); }
 
+    // Send as a real AJAX request so GLPI 11 validates the CSRF token from the
+    // X-Glpi-Csrf-Token header and PRESERVES it (preserve_token). Putting the
+    // token in the body instead made GLPI treat this as a normal POST and
+    // CONSUME the form's single-use token, breaking the subsequent Save.
     fetch(GP.url, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Glpi-Csrf-Token': GP.csrf
+      },
       body: body.toString()
     }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'generic' }; }); })
       .then(function (d) {
