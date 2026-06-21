@@ -23,23 +23,28 @@ declare(strict_types=1);
 final class PluginGitpluginsDiscovery
 {
     /**
-     * Decide, from a single plugin's directory listing + manifest, the action
-     * state for the discovery UI. PURE (no I/O) so it is unit-testable.
+     * Decide, from a single plugin's manifest + managed-source presence, the
+     * source-status for the discovery UI. PURE (no I/O) so it is unit-testable.
      *
-     *  - 'unmanaged' : a source is declared but not yet registered as managed
-     *  - 'managed'   : a managed source already exists for this plugin key
-     *  - 'none'      : no usable <gitupdate> declaration
+     *  - 'managed'  : a gitplugins source already exists for this plugin key
+     *                 (offer Check update / Reinstall) — takes priority
+     *  - 'declared' : the plugin declares a usable <gitupdate> but is not yet
+     *                 managed (offer Check update / Add source, prefilled)
+     *  - 'none'     : no usable <gitupdate> declaration (offer a bare Add source)
      *
-     * @param array|null $manifest result of PluginGitpluginsManifest::parseXml()
+     * @param array|null $manifest         result of PluginGitpluginsManifest::parseXml()
      * @param bool       $hasManagedSource whether a managed source row exists
      */
     public static function decideState(?array $manifest, bool $hasManagedSource): string
     {
+        if ($hasManagedSource) {
+            return 'managed';
+        }
         if ($manifest === null || ($manifest['repo'] ?? '') === '') {
             return 'none';
         }
 
-        return $hasManagedSource ? 'managed' : 'unmanaged';
+        return 'declared';
     }
 
     /**
@@ -130,12 +135,20 @@ final class PluginGitpluginsDiscovery
     }
 
     /**
-     * Discover declared update sources across all installed plugins.
+     * Enumerate EVERY installed plugin with its source status.
+     *
+     * Unlike before, plugins WITHOUT a <gitupdate> declaration are still listed
+     * (state 'none') so the admin can add a source for them — e.g. assetcve,
+     * installed without a declaration, now appears with an "Add source" action.
+     * A declared <gitupdate> contributes the repo/ref/provider for prefilling.
+     *
+     * Filesystem-only (reads each plugin.xml locally) + READs glpi_plugins +
+     * our sources table — NO outbound network here (lesson #7/#11).
      *
      * @return array<int,array{
      *   key:string,name:string,installed_version:string,
      *   repo:string,ref:string,ref_type:string,provider:string,private:bool,
-     *   has_managed_source:bool,managed_source_id:?int,state:string
+     *   has_declaration:bool,has_managed_source:bool,managed_source_id:?int,state:string
      * }>
      */
     public static function scan(): array
@@ -144,26 +157,28 @@ final class PluginGitpluginsDiscovery
         $rows    = [];
 
         foreach (self::installedPlugins() as $plugin) {
-            $key  = $plugin['key'];
-            $xml  = self::readPluginXml($plugin['dir'], $key);
-            if ($xml === null) {
+            $key = $plugin['key'];
+            // Never list ourselves — gitplugins does not manage gitplugins.
+            if ($key === 'gitplugins') {
                 continue;
             }
-            $manifest = PluginGitpluginsManifest::parseXml($xml);
-            if ($manifest === null) {
-                continue; // plugin declares no usable source
-            }
+            $xml      = self::readPluginXml($plugin['dir'], $key);
+            $manifest = $xml !== null ? PluginGitpluginsManifest::parseXml($xml) : null;
 
             $managedId = $managed[$key] ?? null;
+            $hasDecl   = $manifest !== null && ($manifest['repo'] ?? '') !== '';
             $rows[] = [
                 'key'                => $key,
                 'name'               => $plugin['name'] !== '' ? $plugin['name'] : $key,
-                'installed_version'  => $plugin['version'] !== '' ? $plugin['version'] : self::versionFromXml($xml),
-                'repo'               => $manifest['repo'],
-                'ref'                => $manifest['ref'],
-                'ref_type'           => $manifest['ref_type'],
-                'provider'           => $manifest['provider'],
-                'private'            => $manifest['private'],
+                'installed_version'  => $plugin['version'] !== ''
+                    ? $plugin['version']
+                    : ($xml !== null ? self::versionFromXml($xml) : ''),
+                'repo'               => $hasDecl ? (string) $manifest['repo'] : '',
+                'ref'                => $hasDecl ? (string) $manifest['ref'] : '',
+                'ref_type'           => $hasDecl ? (string) $manifest['ref_type'] : '',
+                'provider'           => $hasDecl ? (string) $manifest['provider'] : '',
+                'private'            => $hasDecl ? (bool) $manifest['private'] : false,
+                'has_declaration'    => $hasDecl,
                 'has_managed_source' => $managedId !== null,
                 'managed_source_id'  => $managedId,
                 'state'              => self::decideState($manifest, $managedId !== null),

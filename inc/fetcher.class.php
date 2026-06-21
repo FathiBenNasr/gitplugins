@@ -236,4 +236,73 @@ final class PluginGitpluginsFetcher
 
         return $dest;
     }
+
+    /**
+     * Fetch a small text resource (a plugin.xml manifest) into memory, reusing
+     * the SAME SSRF guard (assertSafeUrl), proxy-aware Guzzle client, redirect
+     * re-validation, timeout and size cap as fetch(). Used by Detect-from-URL —
+     * the ONE place an outbound call is made on user input, behind the right +
+     * allowlist. Returns the body string, or throws a GENERIC RuntimeException.
+     *
+     * Distinct from fetch() because we want the bytes in memory (no temp file)
+     * and a much smaller cap (a manifest is a few KB, not a tarball).
+     *
+     * @param  string[] $allowedHosts host allowlist
+     * @param  string   $token        optional bearer credential ('' = none)
+     * @param  int      $maxBytes     hard size cap (small; manifests are tiny)
+     * @param  int      $timeout      seconds
+     */
+    public static function fetchText(
+        string $url,
+        array $allowedHosts,
+        string $token = '',
+        int $maxBytes = 524288,
+        int $timeout = 15
+    ): string {
+        // Guard before any network touch; pin the resolved peer IP (rebinding).
+        $ips  = self::assertSafeUrl($url, $allowedHosts);
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+        $headers = ['User-Agent' => 'GLPI-gitplugins'];
+        if ($token !== '') {
+            $headers['Authorization'] = 'Bearer ' . $token; // never logged
+        }
+
+        $client = \Toolbox::getGuzzleClient();
+        try {
+            $resp = $client->request('GET', $url, [
+                'headers'         => $headers,
+                'connect_timeout' => min($timeout, 30),
+                'timeout'         => $timeout,
+                'allow_redirects' => [
+                    'max'         => 5,
+                    'strict'      => true,
+                    'referer'     => false,
+                    'protocols'   => ['https'],
+                    'on_redirect' => static function ($request, $response, $uri) use ($allowedHosts): void {
+                        self::assertSafeUrl((string) $uri, $allowedHosts);
+                    },
+                ],
+                'curl'            => [CURLOPT_RESOLVE => [$host . ':443:' . $ips[0]]],
+                // Hard byte cap: read at most $maxBytes from the stream.
+                'stream'          => true,
+            ]);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('fetch_failed');
+        }
+
+        if ($resp->getStatusCode() !== 200) {
+            throw new \RuntimeException('fetch_failed');
+        }
+        $body = $resp->getBody();
+        $out  = '';
+        while (!$body->eof() && strlen($out) <= $maxBytes) {
+            $out .= $body->read(8192);
+        }
+        if ($out === '' || strlen($out) > $maxBytes) {
+            throw new \RuntimeException('fetch_failed');
+        }
+
+        return $out;
+    }
 }

@@ -108,9 +108,71 @@ final class ManifestTest extends TestCase
     public function testDiscoveryDecideState(): void
     {
         $valid = ['repo' => 'https://x.tn/a/b.git', 'ref' => 'main'];
-        self::assertSame('unmanaged', PluginGitpluginsDiscovery::decideState($valid, false));
+        // A declared-but-unmanaged plugin → 'declared'.
+        self::assertSame('declared', PluginGitpluginsDiscovery::decideState($valid, false));
+        // A managed source wins regardless of declaration.
         self::assertSame('managed', PluginGitpluginsDiscovery::decideState($valid, true));
+        self::assertSame('managed', PluginGitpluginsDiscovery::decideState(null, true));
+        self::assertSame('managed', PluginGitpluginsDiscovery::decideState(['repo' => ''], true));
+        // No declaration, not managed → 'none' (offers a bare Add source).
         self::assertSame('none', PluginGitpluginsDiscovery::decideState(null, false));
         self::assertSame('none', PluginGitpluginsDiscovery::decideState(['repo' => ''], false));
+    }
+
+    // ----- parseInfo(): key / name / version extraction -----
+
+    private function full(string $inner): string
+    {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root>\n{$inner}\n</root>";
+    }
+
+    public function testParseInfoExtractsKeyNameVersionAndGitupdate(): void
+    {
+        $info = PluginGitpluginsManifest::parseInfo($this->full(
+            '<key>comm</key><name>Internal Comms</name>'
+            . '<versions><version><num>1.0.0</num></version><version><num>1.2.0</num></version>'
+            . '<version><num>1.10.0</num></version></versions>'
+            . '<gitupdate><repo>https://git.convergent.tn/a/comm.git</repo><provider>forgejo</provider>'
+            . '<ref>main</ref><ref_type>branch</ref_type></gitupdate>'
+        ));
+        self::assertIsArray($info);
+        self::assertSame('comm', $info['key']);
+        self::assertSame('Internal Comms', $info['name']);
+        // Highest <num> wins (1.10.0 > 1.2.0, not a string compare).
+        self::assertSame('1.10.0', $info['version']);
+        self::assertIsArray($info['gitupdate']);
+        self::assertSame('forgejo', $info['gitupdate']['provider']);
+    }
+
+    public function testParseInfoFallsBackToTopLevelVersion(): void
+    {
+        $info = PluginGitpluginsManifest::parseInfo($this->full('<key>x</key><name>X</name><version>2.3.4</version>'));
+        self::assertSame('2.3.4', $info['version']);
+        self::assertNull($info['gitupdate']);
+    }
+
+    public function testParseInfoMissingFieldsAreEmptyNotNull(): void
+    {
+        // No key/name/version/gitupdate at all — parses, fields are ''.
+        $info = PluginGitpluginsManifest::parseInfo($this->full('<description>nothing useful</description>'));
+        self::assertIsArray($info);
+        self::assertSame('', $info['key']);
+        self::assertSame('', $info['name']);
+        self::assertSame('', $info['version']);
+        self::assertNull($info['gitupdate']);
+    }
+
+    public function testParseInfoMalformedReturnsNull(): void
+    {
+        self::assertNull(PluginGitpluginsManifest::parseInfo(''));
+        self::assertNull(PluginGitpluginsManifest::parseInfo('not xml at all <'));
+        self::assertNull(PluginGitpluginsManifest::parseInfo('<root><key>x'));
+    }
+
+    public function testParseInfoTrimsCrLf(): void
+    {
+        $info = PluginGitpluginsManifest::parseInfo($this->full("<key> \r\n comm \n</key><name>\r\nC\n</name>"));
+        self::assertSame('comm', $info['key']);
+        self::assertSame('C', $info['name']);
     }
 }

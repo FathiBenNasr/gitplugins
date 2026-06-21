@@ -125,39 +125,57 @@ $action = htmlspecialchars($root . '/front/discovered.php');
 $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-11">
-  <h2 class="mt-3 mb-2"><?= htmlspecialchars(__('Installed plugins with a declared git source', 'gitplugins')) ?></h2>
-  <p class="text-muted"><?= htmlspecialchars(__('Read from each installed plugin\'s own plugin.xml. No network request is made here; registering only stores the declared source — fetch/install happens later via the installer.', 'gitplugins')) ?></p>
+  <h2 class="mt-3 mb-2"><?= htmlspecialchars(__('Installed plugins', 'gitplugins')) ?></h2>
+  <p class="text-muted"><?= htmlspecialchars(__('Every installed plugin and its git-source status, read from each plugin\'s own plugin.xml. No network request is made here; registering or adding a source only stores it — fetch/install happens later via the installer.', 'gitplugins')) ?></p>
   <table class="table table-hover card-table">
     <thead><tr>
       <th><?= htmlspecialchars(__('Plugin', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Installed', 'gitplugins')) ?></th>
+      <th><?= htmlspecialchars(__('Source status', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Repository', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Ref', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Provider', 'gitplugins')) ?></th>
-      <th><?= htmlspecialchars(__('Visibility', 'gitplugins')) ?></th>
       <th></th>
     </tr></thead>
     <tbody>
-<?php $any = false; foreach ($discovered as $d): $any = true; ?>
+<?php
+$stateBadges = [
+    'managed'  => '<span class="badge bg-success">' . htmlspecialchars(__('managed', 'gitplugins')) . '</span>',
+    'declared' => '<span class="badge bg-info">' . htmlspecialchars(__('declared', 'gitplugins')) . '</span>',
+    'none'     => '<span class="badge bg-secondary">' . htmlspecialchars(__('no source', 'gitplugins')) . '</span>',
+];
+$any = false; foreach ($discovered as $d): $any = true;
+    // Prefilled "Add source" link: always the key; the declared URL/name too.
+    $addUrl = $root . '/front/source.form.php?prefill_key=' . rawurlencode($d['key'])
+        . '&prefill_name=' . rawurlencode($d['name']);
+    if ($d['has_declaration']) {
+        $addUrl .= '&prefill_url=' . rawurlencode($d['repo']);
+    }
+?>
       <tr>
-        <td><strong><?= htmlspecialchars($d['name']) ?></strong> <code><?= htmlspecialchars($d['key']) ?></code></td>
+        <td><strong><?= htmlspecialchars($d['name']) ?></strong> <code><?= htmlspecialchars($d['key']) ?></code>
+          <?= $d['private'] ? ' <span class="badge bg-warning">' . htmlspecialchars(__('private', 'gitplugins')) . '</span>' : '' ?>
+        </td>
         <td><?= htmlspecialchars($d['installed_version']) ?: '<span class="text-muted">—</span>' ?></td>
-        <td class="text-break"><?= htmlspecialchars($d['repo']) ?></td>
-        <td><?= htmlspecialchars($d['ref']) ?: '<span class="text-muted">' . htmlspecialchars(__('latest', 'gitplugins')) . '</span>' ?> <span class="text-muted">(<?= htmlspecialchars($d['ref_type']) ?>)</span></td>
-        <td><?= htmlspecialchars($d['provider']) ?></td>
-        <td><?= $d['private']
-            ? '<span class="badge bg-warning">' . htmlspecialchars(__('private', 'gitplugins')) . '</span>'
-            : '<span class="badge bg-secondary">' . htmlspecialchars(__('public', 'gitplugins')) . '</span>' ?></td>
+        <td><?= $stateBadges[$d['state']] ?? htmlspecialchars($d['state']) ?></td>
+        <td class="text-break"><?= $d['repo'] !== '' ? htmlspecialchars($d['repo']) : '<span class="text-muted">—</span>' ?></td>
+        <td><?= $d['has_declaration']
+            ? (htmlspecialchars($d['ref']) ?: '<span class="text-muted">' . htmlspecialchars(__('latest', 'gitplugins')) . '</span>') . ' <span class="text-muted">(' . htmlspecialchars($d['ref_type']) . ')</span>'
+            : '<span class="text-muted">—</span>' ?></td>
+        <td><?= $d['provider'] !== '' ? htmlspecialchars($d['provider']) : '<span class="text-muted">—</span>' ?></td>
         <td class="text-end">
-<?php if ($d['has_managed_source']): ?>
+<?php if ($d['state'] === 'managed'): ?>
           <a class="btn btn-sm btn-outline-primary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $d['managed_source_id']) ?>"><?= htmlspecialchars(__('Check update / Reinstall', 'gitplugins')) ?></a>
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.form.php?id=' . (int) $d['managed_source_id']) ?>"><?= htmlspecialchars(__('Edit source', 'gitplugins')) ?></a>
-<?php elseif ($canUpd): ?>
+<?php elseif ($canUpd && $d['state'] === 'declared'): ?>
           <form method="post" action="<?= $action ?>" class="d-inline">
             <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
             <input type="hidden" name="plugin_key" value="<?= htmlspecialchars($d['key']) ?>">
             <button type="submit" name="register" class="btn btn-sm btn-primary"><?= htmlspecialchars(__('Register as managed source', 'gitplugins')) ?></button>
           </form>
+          <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($addUrl) ?>"><?= htmlspecialchars(__('Add source', 'gitplugins')) ?></a>
+<?php elseif ($canUpd): ?>
+          <a class="btn btn-sm btn-primary" href="<?= htmlspecialchars($addUrl) ?>"><?= htmlspecialchars(__('Add source', 'gitplugins')) ?></a>
 <?php else: ?>
           <span class="text-muted">—</span>
 <?php endif; ?>
@@ -165,7 +183,7 @@ $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
       </tr>
 <?php endforeach; ?>
 <?php if (!$any): ?>
-      <tr><td colspan="7" class="text-center text-muted"><?= htmlspecialchars(__('No installed plugin declares a git update source.', 'gitplugins')) ?></td></tr>
+      <tr><td colspan="7" class="text-center text-muted"><?= htmlspecialchars(__('No installed plugins found.', 'gitplugins')) ?></td></tr>
 <?php endif; ?>
     </tbody>
   </table>

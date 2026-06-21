@@ -71,4 +71,52 @@ final class RefResolverTest extends TestCase
         self::assertSame('https://api.github.com/repos/foo/bar/tags', PluginGitpluginsRefResolver::tagsApiUrl('github', 'https://github.com/foo/bar'));
         self::assertSame('https://gitlab.com/api/v4/projects/foo%2Fbar/repository/tags', PluginGitpluginsRefResolver::tagsApiUrl('gitlab', 'https://gitlab.com/foo/bar'));
     }
+
+    // ----- rawManifestUrls(): raw plugin.xml URL resolution per provider -----
+
+    public function testRawManifestUrlsGithubWithRef(): void
+    {
+        // The explicit ref is tried first; the usual defaults follow as a fallback.
+        $urls = PluginGitpluginsRefResolver::rawManifestUrls('github', 'https://github.com/foo/bar.git', 'v1.0.0');
+        self::assertSame('https://raw.githubusercontent.com/foo/bar/v1.0.0/plugin.xml', $urls[0]);
+        self::assertContains('https://raw.githubusercontent.com/foo/bar/HEAD/plugin.xml', $urls);
+    }
+
+    public function testRawManifestUrlsForgejoTriesBothShapesAndDefaultRefs(): void
+    {
+        // No ref → HEAD, main, master, each in /raw/branch/ then /raw/ form.
+        $urls = PluginGitpluginsRefResolver::rawManifestUrls('forgejo', 'https://git.convergent.tn/a/comm', '');
+        self::assertContains('https://git.convergent.tn/a/comm/raw/branch/HEAD/plugin.xml', $urls);
+        self::assertContains('https://git.convergent.tn/a/comm/raw/HEAD/plugin.xml', $urls);
+        self::assertContains('https://git.convergent.tn/a/comm/raw/branch/main/plugin.xml', $urls);
+        self::assertContains('https://git.convergent.tn/a/comm/raw/branch/master/plugin.xml', $urls);
+        // First candidate is the explicit-shape default branch.
+        self::assertSame('https://git.convergent.tn/a/comm/raw/branch/HEAD/plugin.xml', $urls[0]);
+    }
+
+    public function testRawManifestUrlsGitlab(): void
+    {
+        $urls = PluginGitpluginsRefResolver::rawManifestUrls('gitlab', 'https://gitlab.com/foo/bar', 'main');
+        self::assertSame('https://gitlab.com/foo/bar/-/raw/main/plugin.xml', $urls[0]);
+        // 'main' is also a default, so it isn't duplicated; HEAD/master follow.
+        self::assertContains('https://gitlab.com/foo/bar/-/raw/HEAD/plugin.xml', $urls);
+    }
+
+    public function testRawManifestUrlsRejectsBadInput(): void
+    {
+        self::assertSame([], PluginGitpluginsRefResolver::rawManifestUrls('github', 'http://github.com/foo/bar', 'main')); // not https
+        self::assertSame([], PluginGitpluginsRefResolver::rawManifestUrls('github', 'https://github.com/', 'main'));      // no repo path
+        self::assertSame([], PluginGitpluginsRefResolver::rawManifestUrls('mystery', 'https://x.tn/a/b', 'main'));        // unknown provider
+    }
+
+    public function testRawManifestUrlsInvalidRefFallsBackToDefaults(): void
+    {
+        // A bad explicit ref is dropped; default branches are still tried.
+        $urls = PluginGitpluginsRefResolver::rawManifestUrls('github', 'https://github.com/foo/bar', '../evil');
+        self::assertSame([
+            'https://raw.githubusercontent.com/foo/bar/HEAD/plugin.xml',
+            'https://raw.githubusercontent.com/foo/bar/main/plugin.xml',
+            'https://raw.githubusercontent.com/foo/bar/master/plugin.xml',
+        ], $urls);
+    }
 }

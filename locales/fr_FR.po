@@ -289,3 +289,63 @@ msgstr "Source enregistrée. Ajoutez le jeton du dépôt privé pour permettre l
 
 msgid "Source registered as managed."
 msgstr "Source enregistrée comme gérée."
+
+msgid "Add source"
+msgstr "Ajouter une source"
+
+msgid "Auto-detect is not supported for this provider — fill the fields manually."
+msgstr "La détection automatique n'est pas prise en charge pour ce fournisseur — remplissez les champs manuellement."
+
+msgid "Could not fetch plugin.xml from the repository. Fill the fields manually."
+msgstr "Impossible de récupérer plugin.xml depuis le dépôt. Remplissez les champs manuellement."
+
+msgid "declared"
+msgstr "déclarée"
+
+msgid "Detect"
+msgstr "Détecter"
+
+msgid "Detected and pre-filled the fields below. Review, then Save."
+msgstr "Champs détectés et préremplis ci-dessous. Vérifiez, puis enregistrez."
+
+msgid "Detecting…"
+msgstr "Détection…"
+
+msgid "Detection failed. Fill the fields manually."
+msgstr "Échec de la détection. Remplissez les champs manuellement."
+
+msgid "Enter a valid https:// repository URL."
+msgstr "Saisissez une URL de dépôt https:// valide."
+
+msgid "Enter the repository URL first."
+msgstr "Saisissez d'abord l'URL du dépôt."
+
+msgid "Every installed plugin and its git-source status, read from each plugin's own plugin.xml. No network request is made here; registering or adding a source only stores it — fetch/install happens later via the installer."
+msgstr "Chaque plugin installé et son état de source git, lu depuis le plugin.xml de chaque plugin. Aucune requête réseau n'est effectuée ici ; enregistrer ou ajouter une source ne fait que la stocker — la récupération/installation a lieu plus tard via l'installateur."
+
+msgid "managed"
+msgstr "gérée"
+
+msgid "No installed plugins found."
+msgstr "Aucun plugin installé trouvé."
+
+msgid "no source"
+msgstr "aucune source"
+
+msgid "Paste the repository URL and click Detect to auto-fill the fields from the repository's plugin.xml."
+msgstr "Collez l'URL du dépôt et cliquez sur Détecter pour préremplir les champs depuis le plugin.xml du dépôt."
+
+msgid "Source status"
+msgstr "État de la source"
+
+msgid "That host is not on the allowed-hosts list (see Configuration)."
+msgstr "Cet hôte n'est pas dans la liste des hôtes autorisés (voir Configuration)."
+
+msgid "The repository's plugin.xml could not be read. Fill the fields manually."
+msgstr "Le plugin.xml du dépôt n'a pas pu être lu. Remplissez les champs manuellement."
+
+msgid "This repository is declared private — a token is required to fetch and install it."
+msgstr "Ce dépôt est déclaré privé — un jeton est requis pour le récupérer et l'installer."
+
+msgid "You are not allowed to run detection."
+msgstr "Vous n'êtes pas autorisé à lancer la détection."
