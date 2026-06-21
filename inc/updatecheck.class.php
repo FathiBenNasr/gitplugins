@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 class PluginGitpluginsUpdatecheck extends CommonGLPI
 {
+    /** Localised CronTask label for the Automatic Actions UI. */
     public static function getTypeName($nb = 0): string
     {
         return __('Git plugin update check', 'gitplugins');

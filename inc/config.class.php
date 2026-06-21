@@ -17,6 +17,7 @@ final class PluginGitpluginsConfig
     private static ?self $instance = null;
     private array        $row      = [];
 
+    /** Lazily load and return the single shared config row accessor. */
     public static function singleton(): self
     {
         if (self::$instance === null) {
@@ -71,31 +72,37 @@ final class PluginGitpluginsConfig
         return array_values($out);
     }
 
+    /** Whether the cron worker may auto-install/update without manual approval. */
     public function allowAutoInstall(): bool
     {
         return (bool) ($this->row['allow_auto_install'] ?? false);
     }
 
+    /** Whether installing a version older than the installed one is permitted. */
     public function allowDowngrade(): bool
     {
         return (bool) ($this->row['allow_downgrade'] ?? false);
     }
 
+    /** Max archive download size in MB (clamped 1..500). */
     public function getMaxDownloadMb(): int
     {
         return max(1, min(500, (int) ($this->row['max_download_mb'] ?? 50)));
     }
 
+    /** Max archive download size in bytes (getMaxDownloadMb * 1024 * 1024). */
     public function getMaxDownloadBytes(): int
     {
         return $this->getMaxDownloadMb() * 1024 * 1024;
     }
 
+    /** Per-fetch network timeout in seconds (clamped 5..300). */
     public function getFetchTimeoutSeconds(): int
     {
         return max(5, min(300, (int) ($this->row['fetch_timeout_seconds'] ?? 30)));
     }
 
+    /** Update-check cadence in minutes (clamped 5..40320). */
     public function getCheckFrequencyMinutes(): int
     {
         return max(5, min(40320, (int) ($this->row['check_frequency_minutes'] ?? 1440)));

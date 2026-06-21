@@ -16,21 +16,25 @@ class PluginGitpluginsSource extends CommonDBTM
 {
     public static $rightname = 'plugin_gitplugins';
 
+    /** Localised type name (singular/plural) for GLPI UI labels. */
     public static function getTypeName($nb = 0): string
     {
         return _n('Git plugin source', 'Git plugin sources', $nb, 'gitplugins');
     }
 
+    /** Localised menu title for the plugin's Administration entry. */
     public static function getMenuName(): string
     {
         return __('Git Plugin Installer', 'gitplugins');
     }
 
+    /** Tabler icon class for the menu/breadcrumb. */
     public static function getIcon(): string
     {
         return 'ti ti-git-branch';
     }
 
+    /** Build the plugin's menu entry (title, page, icon, sub-links). */
     public static function getMenuContent(): array
     {
         $root = PLUGIN_GITPLUGINS_ROOTDOC;

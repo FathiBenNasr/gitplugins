@@ -14,7 +14,12 @@ declare(strict_types=1);
 
 final class PluginGitpluginsLog
 {
-    /** @param 'ok'|'error' $result */
+    /**
+     * Record one audited fetch/install/update to our log table and the GLPI
+     * Event log. Messages are generic (no secrets); all fields are length-capped.
+     *
+     * @param 'ok'|'error' $result
+     */
     public static function record(
         ?int $sourceId,
         string $action,
