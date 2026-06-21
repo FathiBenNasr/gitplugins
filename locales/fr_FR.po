@@ -1,0 +1,234 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Git Plugin Installer 0.1.0-dev\n"
+"Report-Msgid-Bugs-To: Convergent Cloud Computing <support@convergent.tn>\n"
+"PO-Revision-Date: 2026-06-21\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Git plugin source"
+msgid_plural "Git plugin sources"
+msgstr[0] "Source de plugin Git"
+msgstr[1] "Sources de plugin Git"
+
+msgid "Git Plugin Installer"
+msgstr "Installateur de plugins Git"
+
+msgid "Git Plugin Installer requires GLPI %s or later."
+msgstr "Installateur de plugins Git requiert GLPI %s ou une version supérieure."
+
+msgid "Git Plugin Installer requires PHP 8.2 or later."
+msgstr "Installateur de plugins Git requiert PHP 8.2 ou une version supérieure."
+
+msgid "Git Plugin Installer: schema not installed — run the plugin install step."
+msgstr "Installateur de plugins Git : schéma non installé — exécutez l'étape d'installation du plugin."
+
+msgid "Git plugin update check"
+msgstr "Vérification des mises à jour des plugins Git"
+
+msgid "Check managed git sources for updates and run pending installs"
+msgstr "Vérifie les mises à jour des sources Git gérées et exécute les installations en attente"
+
+msgid "Sources"
+msgstr "Sources"
+
+msgid "Status"
+msgstr "État"
+
+msgid "Configuration"
+msgstr "Configuration"
+
+msgid "Name"
+msgstr "Nom"
+
+msgid "Plugin key"
+msgstr "Clé du plugin"
+
+msgid "Provider"
+msgstr "Fournisseur"
+
+msgid "Ref policy"
+msgstr "Politique de référence"
+
+msgid "Active"
+msgstr "Actif"
+
+msgid "New source"
+msgstr "Nouvelle source"
+
+msgid "No managed sources yet."
+msgstr "Aucune source gérée pour l'instant."
+
+msgid "Install / Update"
+msgstr "Installer / Mettre à jour"
+
+msgid "Source removed from management."
+msgstr "Source retirée de la gestion."
+
+msgid "The repository URL must be an https:// URL."
+msgstr "L'URL du dépôt doit être une URL https://."
+
+msgid "A plugin key (lowercase letters, digits, underscore) is required."
+msgstr "Une clé de plugin (minuscules, chiffres, tiret bas) est requise."
+
+msgid "A valid ref (branch, tag or commit SHA) is required for this policy."
+msgstr "Une référence valide (branche, tag ou SHA de commit) est requise pour cette politique."
+
+msgid "Host \"%s\" is not in the allowed-hosts list (see Configuration)."
+msgstr "L'hôte « %s » n'est pas dans la liste des hôtes autorisés (voir Configuration)."
+
+msgid "Source saved."
+msgstr "Source enregistrée."
+
+msgid "Source created."
+msgstr "Source créée."
+
+msgid "Edit source"
+msgstr "Modifier la source"
+
+msgid "Display name"
+msgstr "Nom affiché"
+
+msgid "Repository URL (https only)"
+msgstr "URL du dépôt (https uniquement)"
+
+msgid "Only hosts on the allow-list (Configuration) are accepted. The server fetches a tarball over HTTPS — no git binary is used."
+msgstr "Seuls les hôtes de la liste blanche (Configuration) sont acceptés. Le serveur télécharge une archive via HTTPS — aucun binaire git n'est utilisé."
+
+msgid "Plugin key (directory name)"
+msgstr "Clé du plugin (nom du répertoire)"
+
+msgid "Ref (branch / tag / SHA)"
+msgstr "Référence (branche / tag / SHA)"
+
+msgid "Private-repo token (write-only)"
+msgstr "Jeton de dépôt privé (écriture seule)"
+
+msgid "•••••• (stored — leave blank to keep)"
+msgstr "•••••• (enregistré — laisser vide pour conserver)"
+
+msgid "Remove the stored token"
+msgstr "Supprimer le jeton enregistré"
+
+msgid "Encrypted with GLPI's key, sent only as an Authorization header, never logged or displayed."
+msgstr "Chiffré avec la clé de GLPI, envoyé uniquement en en-tête Authorization, jamais journalisé ni affiché."
+
+msgid "Active (checked for updates)"
+msgstr "Actif (vérifié pour les mises à jour)"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Back"
+msgstr "Retour"
+
+msgid "Remove"
+msgstr "Retirer"
+
+msgid "Remove this source from management? The installed plugin is NOT uninstalled."
+msgstr "Retirer cette source de la gestion ? Le plugin installé n'est PAS désinstallé."
+
+msgid "Latest release tag"
+msgstr "Dernier tag de version"
+
+msgid "Track a branch"
+msgstr "Suivre une branche"
+
+msgid "Pin to a tag"
+msgstr "Épingler à un tag"
+
+msgid "Pin to a commit SHA"
+msgstr "Épingler à un SHA de commit"
+
+msgid "Confirm install / update"
+msgstr "Confirmer l'installation / mise à jour"
+
+msgid "Installing runs the target plugin's own install code on this server. Only proceed for a source you trust."
+msgstr "L'installation exécute le code d'installation du plugin cible sur ce serveur. Ne poursuivez que pour une source de confiance."
+
+msgid "Source URL"
+msgstr "URL de la source"
+
+msgid "Resolved ref"
+msgstr "Référence résolue"
+
+msgid "Commit SHA"
+msgstr "SHA de commit"
+
+msgid "resolved at fetch"
+msgstr "résolu au téléchargement"
+
+msgid "Installed version"
+msgstr "Version installée"
+
+msgid "not installed"
+msgstr "non installé"
+
+msgid "Available version"
+msgstr "Version disponible"
+
+msgid "Queue install / update"
+msgstr "Mettre en file l'installation / mise à jour"
+
+msgid "Queue this install/update?"
+msgstr "Mettre cette installation/mise à jour en file ?"
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgid "Refused: the available version is older than the installed one (downgrade not allowed)."
+msgstr "Refusé : la version disponible est plus ancienne que celle installée (rétrogradation interdite)."
+
+msgid "Already up to date — nothing to install."
+msgstr "Déjà à jour — rien à installer."
+
+msgid "Queued. The installer cron will fetch and install it on its next run."
+msgstr "Mis en file. La tâche planifiée d'installation le téléchargera et l'installera lors de sa prochaine exécution."
+
+msgid "Git Plugin Installer configuration"
+msgstr "Configuration de l'Installateur de plugins Git"
+
+msgid "Allowed hosts (one per line)"
+msgstr "Hôtes autorisés (un par ligne)"
+
+msgid "SSRF guard: the server will only fetch from these exact hosts. Add codeload.github.com for GitHub. An empty list keeps the safe defaults."
+msgstr "Protection SSRF : le serveur ne télécharge que depuis ces hôtes exacts. Ajoutez codeload.github.com pour GitHub. Une liste vide conserve les valeurs par défaut sûres."
+
+msgid "Max download size (MB)"
+msgstr "Taille maximale de téléchargement (Mo)"
+
+msgid "Fetch timeout (seconds)"
+msgstr "Délai d'expiration du téléchargement (secondes)"
+
+msgid "Update-check frequency (minutes)"
+msgstr "Fréquence de vérification des mises à jour (minutes)"
+
+msgid "Allow automatic (unattended) install on update — leave OFF for confirm-before-install"
+msgstr "Autoriser l'installation automatique (sans surveillance) lors d'une mise à jour — laissez DÉSACTIVÉ pour confirmer avant d'installer"
+
+msgid "Allow downgrading to an older version (not recommended)"
+msgstr "Autoriser la rétrogradation vers une version antérieure (non recommandé)"
+
+msgid "Configuration saved."
+msgstr "Configuration enregistrée."
+
+msgid "Managed plugin status"
+msgstr "État des plugins gérés"
+
+msgid "Installed"
+msgstr "Installé"
+
+msgid "Available"
+msgstr "Disponible"
+
+msgid "Pending"
+msgstr "En attente"
+
+msgid "Last check"
+msgstr "Dernière vérification"
+
+msgid "Last result"
+msgstr "Dernier résultat"
