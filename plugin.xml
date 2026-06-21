@@ -4,6 +4,13 @@
    <key>gitplugins</key>
    <state>unstable</state>
    <logo>https://git.convergent.tn/fbennasr/gitplugins/raw/branch/main/pics/gitplugins_64.png</logo>
+   <gitupdate>
+      <repo>https://git.convergent.tn/fbennasr/gitplugins.git</repo>
+      <ref>main</ref>
+      <ref_type>branch</ref_type>
+      <provider>forgejo</provider>
+      <private>false</private>
+   </gitupdate>
    <description>
       <short>
          <en>Install and update GLPI plugins from a git/HTTPS source (GitHub, GitLab, Gitea, Forgejo), extending GLPI's native plugin pipeline.</en>
