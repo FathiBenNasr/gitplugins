@@ -58,7 +58,7 @@ final class PluginGitpluginsConfig
             $raw = json_decode($raw, true);
         }
         if (!is_array($raw) || $raw === []) {
-            $raw = ['github.com', 'codeload.github.com', 'gitlab.com', 'git.convergent.tn'];
+            $raw = ['github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'gitlab.com', 'git.convergent.tn'];
         }
         $out = [];
         foreach ($raw as $h) {
@@ -121,7 +121,7 @@ final class PluginGitpluginsConfig
         if ($hosts === []) {
             // Never allow an empty allowlist (would be a wide-open SSRF surface);
             // keep the safe default.
-            $hosts = ['github.com', 'codeload.github.com', 'gitlab.com', 'git.convergent.tn'];
+            $hosts = ['github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'gitlab.com', 'git.convergent.tn'];
         }
 
         $data = [
