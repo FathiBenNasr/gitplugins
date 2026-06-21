@@ -86,6 +86,68 @@ final class PluginGitpluginsManifest
         ];
     }
 
+    /**
+     * Parse the descriptive fields of a plugin.xml string: <key>, <name>, the
+     * latest version (highest <num> under <versions>, else top-level <version>),
+     * PLUS the <gitupdate> declaration (or null when absent/malformed).
+     *
+     * PURE (no DB/FS/network), XXE-safe (LIBXML_NONET, no entity resolution).
+     * Tolerant: missing fields come back as '' rather than throwing, so the
+     * Detect-from-URL form can prefill whatever the manifest provides and leave
+     * the rest to the admin. Returns null only when the XML is unparseable.
+     *
+     * @return array{key:string,name:string,version:string,gitupdate:array{repo:string,ref:string,ref_type:string,provider:string,private:bool}|null}|null
+     */
+    public static function parseInfo(string $xml): ?array
+    {
+        $xml = trim($xml);
+        if ($xml === '') {
+            return null;
+        }
+
+        $prev = libxml_use_internal_errors(true);
+        $doc  = simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+
+        if (!($doc instanceof \SimpleXMLElement)) {
+            return null;
+        }
+
+        return [
+            'key'       => self::scalar($doc->key ?? null),
+            'name'      => self::scalar($doc->name ?? null),
+            'version'   => self::latestVersion($doc),
+            // Reuse the dedicated, well-tested gitupdate parser on the same string.
+            'gitupdate' => self::parseXml($xml),
+        ];
+    }
+
+    /**
+     * Highest declared version: prefer the newest <num> under <versions>, else
+     * fall back to a top-level <version>. Uses version_compare so 1.10 > 1.9.
+     */
+    private static function latestVersion(\SimpleXMLElement $doc): string
+    {
+        $best = '';
+        if (isset($doc->versions->version)) {
+            foreach ($doc->versions->version as $v) {
+                $num = self::scalar($v->num ?? null);
+                if ($num === '') {
+                    continue;
+                }
+                if ($best === '' || version_compare($num, $best, '>')) {
+                    $best = $num;
+                }
+            }
+        }
+        if ($best !== '') {
+            return $best;
+        }
+
+        return self::scalar($doc->version ?? null);
+    }
+
     /** Trim + strip CR/LF/NUL from a SimpleXML scalar node. '' when absent. */
     private static function scalar($node): string
     {

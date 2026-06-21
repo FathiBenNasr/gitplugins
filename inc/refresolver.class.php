@@ -105,6 +105,70 @@ final class PluginGitpluginsRefResolver
     }
 
     /**
+     * Build the candidate raw-plugin.xml URLs for (provider, repo URL, ref).
+     * PURE: pure URL construction, no network. The Detect-from-URL flow tries
+     * each in order and stops at the first 200 (so a Forgejo/Gitea host gets both
+     * the /raw/branch/{ref}/ and /raw/{ref}/ shapes; an empty ref expands to the
+     * usual default branch candidates HEAD/main/master).
+     *
+     * A trailing ".git" is stripped (repoPath handles it). Returns [] when inputs
+     * are invalid (caller maps to a generic "could not detect" error).
+     *
+     * @param  string   $provider one of github|gitlab|gitea|forgejo
+     * @param  string   $url      https repo URL
+     * @param  string   $ref      explicit ref, or '' to try the default branches
+     * @return string[] ordered candidate raw URLs (possibly empty)
+     */
+    public static function rawManifestUrls(string $provider, string $url, string $ref = ''): array
+    {
+        $repo = self::repoPath($url);
+        if ($repo === null) {
+            return [];
+        }
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        $host   = (string) parse_url($url, PHP_URL_HOST);
+        if ($scheme !== 'https' || $host === '') {
+            return [];
+        }
+
+        // Build the ordered ref candidate list. A caller-supplied ref must be
+        // valid; otherwise (or when empty) fall back to HEAD/main/master.
+        $refs = [];
+        $ref  = trim($ref);
+        if ($ref !== '' && self::isValidRef($ref)) {
+            $refs[] = $ref;
+        }
+        foreach (['HEAD', 'main', 'master'] as $d) {
+            if (!in_array($d, $refs, true)) {
+                $refs[] = $d;
+            }
+        }
+
+        $out = [];
+        foreach ($refs as $r) {
+            $encRef     = rawurlencode($r);
+            $candidates = match ($provider) {
+                'github'           => ["https://raw.githubusercontent.com/{$repo}/{$encRef}/plugin.xml"],
+                'gitlab'           => [sprintf('https://%s/%s/-/raw/%s/plugin.xml', $host, $repo, $encRef)],
+                // Forgejo/Gitea: newer hosts want /raw/branch/{ref}/…; older ones
+                // and tags/SHAs resolve via the bare /raw/{ref}/… — try both.
+                'gitea', 'forgejo' => [
+                    sprintf('https://%s/%s/raw/branch/%s/plugin.xml', $host, $repo, $encRef),
+                    sprintf('https://%s/%s/raw/%s/plugin.xml', $host, $repo, $encRef),
+                ],
+                default            => [],
+            };
+            foreach ($candidates as $candidate) {
+                if (!in_array($candidate, $out, true)) {
+                    $out[] = $candidate;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Build the "list tags" API URL used (over the network, in Phase 4) to
      * resolve latest_tag and ref→SHA. Pure URL construction only.
      */

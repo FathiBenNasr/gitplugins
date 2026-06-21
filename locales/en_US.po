@@ -289,3 +289,63 @@ msgstr "Source registered. Add the private-repo token to enable fetching."
 
 msgid "Source registered as managed."
 msgstr "Source registered as managed."
+
+msgid "Add source"
+msgstr "Add source"
+
+msgid "Auto-detect is not supported for this provider — fill the fields manually."
+msgstr "Auto-detect is not supported for this provider — fill the fields manually."
+
+msgid "Could not fetch plugin.xml from the repository. Fill the fields manually."
+msgstr "Could not fetch plugin.xml from the repository. Fill the fields manually."
+
+msgid "declared"
+msgstr "declared"
+
+msgid "Detect"
+msgstr "Detect"
+
+msgid "Detected and pre-filled the fields below. Review, then Save."
+msgstr "Detected and pre-filled the fields below. Review, then Save."
+
+msgid "Detecting…"
+msgstr "Detecting…"
+
+msgid "Detection failed. Fill the fields manually."
+msgstr "Detection failed. Fill the fields manually."
+
+msgid "Enter a valid https:// repository URL."
+msgstr "Enter a valid https:// repository URL."
+
+msgid "Enter the repository URL first."
+msgstr "Enter the repository URL first."
+
+msgid "Every installed plugin and its git-source status, read from each plugin's own plugin.xml. No network request is made here; registering or adding a source only stores it — fetch/install happens later via the installer."
+msgstr "Every installed plugin and its git-source status, read from each plugin's own plugin.xml. No network request is made here; registering or adding a source only stores it — fetch/install happens later via the installer."
+
+msgid "managed"
+msgstr "managed"
+
+msgid "No installed plugins found."
+msgstr "No installed plugins found."
+
+msgid "no source"
+msgstr "no source"
+
+msgid "Paste the repository URL and click Detect to auto-fill the fields from the repository's plugin.xml."
+msgstr "Paste the repository URL and click Detect to auto-fill the fields from the repository's plugin.xml."
+
+msgid "Source status"
+msgstr "Source status"
+
+msgid "That host is not on the allowed-hosts list (see Configuration)."
+msgstr "That host is not on the allowed-hosts list (see Configuration)."
+
+msgid "The repository's plugin.xml could not be read. Fill the fields manually."
+msgstr "The repository's plugin.xml could not be read. Fill the fields manually."
+
+msgid "This repository is declared private — a token is required to fetch and install it."
+msgstr "This repository is declared private — a token is required to fetch and install it."
+
+msgid "You are not allowed to run detection."
+msgstr "You are not allowed to run detection."
