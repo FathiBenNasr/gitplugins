@@ -232,3 +232,60 @@ msgstr "Dernière vérification"
 
 msgid "Last result"
 msgstr "Dernier résultat"
+
+msgid "Installed plugins"
+msgstr "Plugins installés"
+
+msgid "Installed plugins with a declared git source"
+msgstr "Plugins installés déclarant une source git"
+
+msgid "Read from each installed plugin's own plugin.xml. No network request is made here; registering only stores the declared source — fetch/install happens later via the installer."
+msgstr "Lu depuis le plugin.xml de chaque plugin installé. Aucune requête réseau n'est effectuée ici ; l'enregistrement ne fait que mémoriser la source déclarée — le téléchargement/l'installation a lieu ensuite via l'installateur."
+
+msgid "Plugin"
+msgstr "Plugin"
+
+msgid "Repository"
+msgstr "Dépôt"
+
+msgid "Ref"
+msgstr "Référence"
+
+msgid "Visibility"
+msgstr "Visibilité"
+
+msgid "private"
+msgstr "privé"
+
+msgid "public"
+msgstr "public"
+
+msgid "latest"
+msgstr "dernier"
+
+msgid "Check update / Reinstall"
+msgstr "Vérifier la mise à jour / Réinstaller"
+
+msgid "Register as managed source"
+msgstr "Enregistrer comme source gérée"
+
+msgid "No installed plugin declares a git update source."
+msgstr "Aucun plugin installé ne déclare de source de mise à jour git."
+
+msgid "Invalid plugin key."
+msgstr "Clé de plugin invalide."
+
+msgid "No declared git source found for this plugin."
+msgstr "Aucune source git déclarée trouvée pour ce plugin."
+
+msgid "This plugin already has a managed source."
+msgstr "Ce plugin a déjà une source gérée."
+
+msgid "The declared repository URL must be an https:// URL."
+msgstr "L'URL de dépôt déclarée doit être une URL https://."
+
+msgid "Source registered. Add the private-repo token to enable fetching."
+msgstr "Source enregistrée. Ajoutez le jeton du dépôt privé pour permettre le téléchargement."
+
+msgid "Source registered as managed."
+msgstr "Source enregistrée comme gérée."
