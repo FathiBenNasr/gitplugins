@@ -182,9 +182,24 @@ to **OWASP Top 10 (2021)** / **ASVS L2+**:
 
 ## Screenshots
 
-Screenshots live under `docs/` (pending).
+Installing/updating a plugin (here **Matomo**) from git with Git Plugin Installer:
 
-<!-- TODO: add docs/screenshot-*.png -->
+1. **Configuration** — declare the allowed git hosts (SSRF allowlist).
+   ![Configuration](docs/screenshot-1.png)
+2. **Installed plugins** — every manually-installed plugin is listed; marketplace-managed ones are excluded. Add a git source to any of them.
+   ![Installed plugins](docs/screenshot-2.png)
+3. **New source** — paste the repository URL.
+   ![New source](docs/screenshot-3.png)
+4. **Detect from URL** — the plugin key, name, provider and reference are auto-filled from the repository's `plugin.xml`.
+   ![Detect from URL](docs/screenshot-4.png)
+5. **Sources** — the managed git sources, with install / update actions.
+   ![Sources](docs/screenshot-5.png)
+6. **Confirm** — review key, reference, SHA and installed → available version before queuing.
+   ![Confirm install](docs/screenshot-6.png)
+7. **Status** — the cron fetches, extracts and installs; per-plugin result.
+   ![Status](docs/screenshot-7.png)
+8. **Update detection** — installed plugins with an available update are flagged automatically (cloud badge), no manual check needed.
+   ![Update available](docs/screenshot-8.png)
 
 ## Changelog
 
