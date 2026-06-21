@@ -43,6 +43,8 @@ function plugin_init_gitplugins(): void
 
     // Admin menu entry under Setup — highest-privilege capability (installs
     // remote code), so the menu only shows to holders of our right.
+    // Direct config link (wrench) on the plugin/marketplace card.
+    $PLUGIN_HOOKS['config_page']['gitplugins'] = 'front/config.php';
     if (Session::haveRight('plugin_gitplugins', READ)) {
         $PLUGIN_HOOKS['menu_toadd']['gitplugins'] = ['config' => 'PluginGitpluginsSource'];
     }
