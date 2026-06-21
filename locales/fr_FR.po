@@ -349,3 +349,18 @@ msgstr "Ce dépôt est déclaré privé — un jeton est requis pour le récupé
 
 msgid "You are not allowed to run detection."
 msgstr "Vous n'êtes pas autorisé à lancer la détection."
+
+msgid "marketplace"
+msgstr "marketplace"
+
+msgid "Managed by the GLPI marketplace"
+msgstr "Géré par la marketplace GLPI"
+
+msgid "This plugin is managed by the GLPI marketplace and cannot be managed here."
+msgstr "Ce plugin est géré par la marketplace GLPI et ne peut pas être géré ici."
+
+msgid "Latest built release (.tgz asset)"
+msgstr "Dernière release pré-compilée (asset .tgz)"
+
+msgid "The release tag is not a valid ref."
+msgstr "Le tag de release n'est pas une référence valide."

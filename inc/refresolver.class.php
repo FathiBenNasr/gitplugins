@@ -169,6 +169,101 @@ final class PluginGitpluginsRefResolver
     }
 
     /**
+     * Build the candidate "release" API URLs for (provider, repo URL, ref) — PURE.
+     *
+     * Used by the `release` ref policy: instead of a git source-tarball, the source
+     * publishes a pre-built plugin tarball as a release asset (so plugins that need
+     * a composer/npm build step ship runnable). Given an optional tag ref we resolve
+     * that exact release; otherwise the latest release. The fetcher calls these over
+     * the SSRF-guarded client, reads the JSON, and downloads the picked `.tgz` asset
+     * (or the release tarball as a fallback) — all the network lives there; this is
+     * pure URL construction only, so it is unit-tested.
+     *
+     * GitHub : api.github.com/repos/{repo}/releases/{latest|tags/<tag>}
+     * Forgejo/Gitea : {host}/api/v1/repos/{repo}/releases/{latest|tags/<tag>}
+     * GitLab : {host}/api/v4/projects/{repo}/releases (latest is first; or /<tag>)
+     *
+     * @param  string   $provider one of github|gitlab|gitea|forgejo
+     * @param  string   $url      https repo URL
+     * @param  string   $ref      explicit tag, or '' for the latest release
+     * @return string[] ordered candidate release-API URLs (possibly empty)
+     */
+    public static function releaseApiUrls(string $provider, string $url, string $ref = ''): array
+    {
+        $repo = self::repoPath($url);
+        if ($repo === null) {
+            return [];
+        }
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || $host === '') {
+            return [];
+        }
+
+        $ref = trim($ref);
+        // A caller-supplied tag must be a valid ref token; otherwise resolve latest.
+        $hasTag = $ref !== '' && self::isValidRef($ref);
+        $encRef = $hasTag ? rawurlencode($ref) : '';
+
+        return match ($provider) {
+            'github' => $hasTag
+                ? ["https://api.github.com/repos/{$repo}/releases/tags/{$encRef}"]
+                : ["https://api.github.com/repos/{$repo}/releases/latest"],
+            'gitea', 'forgejo' => $hasTag
+                ? [sprintf('https://%s/api/v1/repos/%s/releases/tags/%s', $host, $repo, $encRef)]
+                : [sprintf('https://%s/api/v1/repos/%s/releases/latest', $host, $repo)],
+            'gitlab' => $hasTag
+                ? [sprintf('https://%s/api/v4/projects/%s/releases/%s', $host, rawurlencode($repo), $encRef)]
+                : [sprintf('https://%s/api/v4/projects/%s/releases', $host, rawurlencode($repo))],
+            default => [],
+        };
+    }
+
+    /**
+     * Pick the download URL of a built tarball asset from a parsed release-API
+     * response — PURE (no network), so it is unit-tested.
+     *
+     * Accepts the decoded JSON of ONE release object (GitHub/Gitea/Forgejo) and
+     * returns the browser-download URL of the first asset whose name ends in
+     * `.tgz`/`.tar.gz`; falls back to the release's source `tarball_url` when no
+     * such asset exists. Returns null when nothing usable is present.
+     *
+     * Asset shapes handled:
+     *   GitHub : assets[].{name, browser_download_url}
+     *   Gitea/Forgejo : assets[].{name, browser_download_url}
+     *
+     * @param array<string,mixed> $release decoded release object
+     */
+    public static function pickReleaseAsset(array $release): ?string
+    {
+        $assets = $release['assets'] ?? null;
+        if (is_array($assets)) {
+            foreach ($assets as $asset) {
+                if (!is_array($asset)) {
+                    continue;
+                }
+                $name = strtolower((string) ($asset['name'] ?? ''));
+                $dl   = (string) ($asset['browser_download_url'] ?? $asset['url'] ?? '');
+                if ($dl !== '' && (str_ends_with($name, '.tgz') || str_ends_with($name, '.tar.gz'))) {
+                    return $dl;
+                }
+            }
+        }
+        // Fallback: the release's own source tarball (GitHub/Gitea expose this).
+        $fallback = (string) ($release['tarball_url'] ?? '');
+
+        return $fallback !== '' ? $fallback : null;
+    }
+
+    /**
+     * The version tag carried by a parsed release object (best-effort, PURE).
+     * GitHub/Gitea/Forgejo expose `tag_name`; GitLab exposes `tag_name` too.
+     */
+    public static function releaseTag(array $release): string
+    {
+        return str_replace(["\r", "\n", "\0"], '', trim((string) ($release['tag_name'] ?? '')));
+    }
+
+    /**
      * Build the "list tags" API URL used (over the network, in Phase 4) to
      * resolve latest_tag and ref→SHA. Pure URL construction only.
      */

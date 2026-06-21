@@ -119,4 +119,97 @@ final class RefResolverTest extends TestCase
             'https://raw.githubusercontent.com/foo/bar/master/plugin.xml',
         ], $urls);
     }
+
+    // ----- releaseApiUrls(): built-release endpoint resolution per provider -----
+
+    public function testReleaseApiUrlsGithubLatestAndTag(): void
+    {
+        self::assertSame(
+            ['https://api.github.com/repos/foo/bar/releases/latest'],
+            PluginGitpluginsRefResolver::releaseApiUrls('github', 'https://github.com/foo/bar', '')
+        );
+        self::assertSame(
+            ['https://api.github.com/repos/foo/bar/releases/tags/v1.2.3'],
+            PluginGitpluginsRefResolver::releaseApiUrls('github', 'https://github.com/foo/bar.git', 'v1.2.3')
+        );
+    }
+
+    public function testReleaseApiUrlsForgejoLatestAndTag(): void
+    {
+        self::assertSame(
+            ['https://git.convergent.tn/api/v1/repos/a/comm/releases/latest'],
+            PluginGitpluginsRefResolver::releaseApiUrls('forgejo', 'https://git.convergent.tn/a/comm', '')
+        );
+        self::assertSame(
+            ['https://git.convergent.tn/api/v1/repos/a/comm/releases/tags/v2.0.0'],
+            PluginGitpluginsRefResolver::releaseApiUrls('gitea', 'https://git.convergent.tn/a/comm', 'v2.0.0')
+        );
+    }
+
+    public function testReleaseApiUrlsGitlab(): void
+    {
+        self::assertSame(
+            ['https://gitlab.com/api/v4/projects/foo%2Fbar/releases'],
+            PluginGitpluginsRefResolver::releaseApiUrls('gitlab', 'https://gitlab.com/foo/bar', '')
+        );
+        self::assertSame(
+            ['https://gitlab.com/api/v4/projects/foo%2Fbar/releases/v1.0.0'],
+            PluginGitpluginsRefResolver::releaseApiUrls('gitlab', 'https://gitlab.com/foo/bar', 'v1.0.0')
+        );
+    }
+
+    public function testReleaseApiUrlsRejectsBadInput(): void
+    {
+        self::assertSame([], PluginGitpluginsRefResolver::releaseApiUrls('github', 'http://github.com/foo/bar', '')); // not https
+        self::assertSame([], PluginGitpluginsRefResolver::releaseApiUrls('github', 'https://github.com/', ''));       // no repo path
+        self::assertSame([], PluginGitpluginsRefResolver::releaseApiUrls('mystery', 'https://x.tn/a/b', ''));         // unknown provider
+        // An invalid tag is dropped → resolves to "latest" instead of injecting.
+        self::assertSame(
+            ['https://api.github.com/repos/foo/bar/releases/latest'],
+            PluginGitpluginsRefResolver::releaseApiUrls('github', 'https://github.com/foo/bar', '../evil')
+        );
+    }
+
+    // ----- pickReleaseAsset(): choose the .tgz built asset, else tarball -----
+
+    public function testPickReleaseAssetPrefersTgzAsset(): void
+    {
+        $release = [
+            'tag_name'    => 'v1.0.0',
+            'tarball_url' => 'https://api.github.com/repos/foo/bar/tarball/v1.0.0',
+            'assets'      => [
+                ['name' => 'notes.txt',      'browser_download_url' => 'https://x/notes.txt'],
+                ['name' => 'plugin-1.0.tgz', 'browser_download_url' => 'https://objects.githubusercontent.com/plugin-1.0.tgz'],
+            ],
+        ];
+        self::assertSame(
+            'https://objects.githubusercontent.com/plugin-1.0.tgz',
+            PluginGitpluginsRefResolver::pickReleaseAsset($release)
+        );
+        self::assertSame('v1.0.0', PluginGitpluginsRefResolver::releaseTag($release));
+    }
+
+    public function testPickReleaseAssetAcceptsTarGzExtension(): void
+    {
+        $release = ['assets' => [['name' => 'built.tar.gz', 'browser_download_url' => 'https://x/built.tar.gz']]];
+        self::assertSame('https://x/built.tar.gz', PluginGitpluginsRefResolver::pickReleaseAsset($release));
+    }
+
+    public function testPickReleaseAssetFallsBackToTarballUrl(): void
+    {
+        $release = [
+            'tarball_url' => 'https://api.github.com/repos/foo/bar/tarball/v1.0.0',
+            'assets'      => [['name' => 'readme.pdf', 'browser_download_url' => 'https://x/readme.pdf']],
+        ];
+        self::assertSame(
+            'https://api.github.com/repos/foo/bar/tarball/v1.0.0',
+            PluginGitpluginsRefResolver::pickReleaseAsset($release)
+        );
+    }
+
+    public function testPickReleaseAssetNullWhenNothingUsable(): void
+    {
+        self::assertNull(PluginGitpluginsRefResolver::pickReleaseAsset([]));
+        self::assertNull(PluginGitpluginsRefResolver::pickReleaseAsset(['assets' => []]));
+    }
 }

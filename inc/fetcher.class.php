@@ -154,6 +154,69 @@ final class PluginGitpluginsFetcher
     }
 
     /**
+     * Resolve the download URL of a pre-built release tarball (.tgz) for the
+     * `release` ref policy. Network step (SSRF-guarded, proxy-aware): queries the
+     * provider's releases API, then delegates to the PURE pickReleaseAsset() to
+     * choose the `.tgz` asset (or the source tarball as a fallback). The candidate
+     * API URLs and asset selection are pure + unit-tested in RefResolver; the HTTP
+     * call lives here. Live-box only.
+     *
+     * Returns [downloadUrl, resolvedTag]. Throws a GENERIC RuntimeException on any
+     * failure (no upstream detail to the user). Both the API URL and the resolved
+     * download URL are re-validated against the SSRF allowlist before any fetch.
+     *
+     * @param  string[] $allowedHosts host allowlist
+     * @param  string   $token        optional bearer credential ('' = none)
+     * @return array{0:string,1:string}
+     */
+    public static function resolveReleaseAsset(
+        string $provider,
+        string $url,
+        string $ref,
+        array $allowedHosts,
+        string $token = '',
+        int $timeout = 15
+    ): array {
+        $candidates = PluginGitpluginsRefResolver::releaseApiUrls($provider, $url, $ref);
+        if ($candidates === []) {
+            throw new \RuntimeException('invalid_ref');
+        }
+
+        $lastError = 'fetch_failed';
+        foreach ($candidates as $apiUrl) {
+            try {
+                $body = self::fetchText($apiUrl, $allowedHosts, $token, 1048576, $timeout);
+            } catch (\Throwable $e) {
+                $lastError = 'fetch_failed';
+                continue;
+            }
+            $data = json_decode($body, true);
+            if (!is_array($data)) {
+                continue;
+            }
+            // GitLab's "list releases" returns an array; take the first (latest).
+            // A single-release endpoint returns the object directly.
+            $release = (isset($data['tag_name']) || isset($data['assets']))
+                ? $data
+                : (isset($data[0]) && is_array($data[0]) ? $data[0] : null);
+            if (!is_array($release)) {
+                continue;
+            }
+            $download = PluginGitpluginsRefResolver::pickReleaseAsset($release);
+            if ($download === null || $download === '') {
+                continue;
+            }
+            // Re-validate the resolved download URL against the SSRF policy before
+            // it is handed to fetch() (it may point at a different allowed host).
+            self::assertSafeUrl($download, $allowedHosts);
+
+            return [$download, PluginGitpluginsRefResolver::releaseTag($release)];
+        }
+
+        throw new \RuntimeException($lastError);
+    }
+
+    /**
      * Download the archive at $url to a unique temp file. Reuses GLPI's
      * proxy-aware Guzzle client (free $CFG_GLPI['proxy_*'] + GLPIKey compliance),
      * enforces timeout + size cap, sends any credential as a Bearer header (never

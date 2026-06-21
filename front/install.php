@@ -47,6 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Session::addMessageAfterRedirect(__('Refused: the available version is older than the installed one (downgrade not allowed).', 'gitplugins'), false, ERROR);
         Html::redirect($root . '/front/source.php');
     }
+    // The release policy resolves its version only at fetch time, so "skip" here
+    // would mean an unknown available version — let the admin (re)install/update
+    // anyway; the runner fetches the latest release tarball.
+    if ((string) ($source['ref_policy'] ?? '') === 'release' && $decision === 'skip') {
+        $decision = $installed === '' ? 'install' : 'update';
+    }
     if ($decision === 'skip') {
         Session::addMessageAfterRedirect(__('Already up to date — nothing to install.', 'gitplugins'));
         Html::redirect($root . '/front/source.php');

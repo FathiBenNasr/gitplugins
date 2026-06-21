@@ -88,15 +88,37 @@ final class PluginGitpluginsInstaller
             return false;
         }
 
-        $built = self::archiveFor($source, $resolvedRef);
-        if ($built === null) {
-            self::fail($sourceId, $key, 'invalid_ref');
+        $token  = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
+        $policy = (string) ($source['ref_policy'] ?? 'latest_tag');
 
-            return false;
+        // Resolve the archive URL. For the `release` policy we resolve a pre-built
+        // release asset (.tgz) via the releases API (network, SSRF-guarded); for
+        // every other policy we build the git source-tarball URL (pure).
+        if ($policy === 'release') {
+            try {
+                [$archiveUrl] = PluginGitpluginsFetcher::resolveReleaseAsset(
+                    (string) ($source['provider'] ?? 'unknown'),
+                    (string) ($source['url'] ?? ''),
+                    $resolvedRef,
+                    $cfg->getAllowedHosts(),
+                    $token,
+                    $cfg->getFetchTimeoutSeconds()
+                );
+            } catch (\Throwable $e) {
+                self::fail($sourceId, $key, $e->getMessage());
+
+                return false;
+            }
+        } else {
+            $built = self::archiveFor($source, $resolvedRef);
+            if ($built === null) {
+                self::fail($sourceId, $key, 'invalid_ref');
+
+                return false;
+            }
+            [$archiveUrl] = $built;
         }
-        [$archiveUrl] = $built;
 
-        $token   = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
         $archive = null;
         $staged  = null;
         try {
