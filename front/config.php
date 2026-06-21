@@ -64,6 +64,16 @@ $csrf   = Session::getNewCSRFToken();
       <input class="form-check-input" type="checkbox" name="allow_downgrade" id="adg"<?= $config->allowDowngrade() ? ' checked' : '' ?>>
       <label class="form-check-label" for="adg"><?= htmlspecialchars(__('Allow downgrading to an older version (not recommended)', 'gitplugins')) ?></label>
     </div>
+    <hr>
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" name="notify_updates" id="nu"<?= $config->notifyUpdates() ? ' checked' : '' ?>>
+      <label class="form-check-label" for="nu"><?= htmlspecialchars(__('Email a digest when managed plugins have updates available', 'gitplugins')) ?></label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Digest recipient (optional)', 'gitplugins')) ?></label>
+      <input type="email" class="form-control" name="notify_recipient" value="<?= htmlspecialchars($config->getNotifyRecipient()) ?>" placeholder="<?= htmlspecialchars(__('Defaults to Super-Admin users / GLPI admin email', 'gitplugins')) ?>">
+      <div class="form-text"><?= htmlspecialchars(__('Leave blank to email all active Super-Admin users (or the GLPI admin email).', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

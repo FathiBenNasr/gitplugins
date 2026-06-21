@@ -58,13 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Html::redirect($root . '/front/source.php');
     }
 
-    // Enqueue — the cron runner fetches + installs out of band.
+    // Enqueue — the cron runner fetches + installs out of band. Upsert by
+    // plugin_key (UNIQUE: one install-state row per managed plugin), recording
+    // which source to act from; never a blind insert (no duplicate rows).
     $DB->updateOrInsert('glpi_plugin_gitplugins_installs', [
-        'plugin_key'     => (string) $source['plugin_key'],
-        'pending_action' => $decision === 'update' ? 'update' : 'install',
-        'last_result'    => 'pending',
-        'last_error'     => null,
-    ], ['plugin_gitplugins_sources_id' => $id]);
+        'plugin_key'                   => (string) $source['plugin_key'],
+        'plugin_gitplugins_sources_id' => $id,
+        'pending_action'               => $decision === 'update' ? 'update' : 'install',
+        'last_result'                  => 'pending',
+        'last_error'                   => null,
+    ], ['plugin_key' => (string) $source['plugin_key']]);
     PluginGitpluginsLog::record($id, 'enqueue', 'ok', $decision . ' ' . $source['plugin_key'], (string) ($resolved['ref'] ?? ''));
 
     Session::addMessageAfterRedirect(__('Queued. The installer cron will fetch and install it on its next run.', 'gitplugins'));

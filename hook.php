@@ -57,14 +57,18 @@ function plugin_gitplugins_install(): bool
                 `installed_sha`       VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Commit SHA of the installed checkout, when known',
                 `available_version`   VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Latest version resolved from the source per its ref policy',
                 `available_sha`       VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Commit SHA of the available ref, when known',
+                `update_available`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Cached flag: 1 when the available version/SHA differs from the installed one (drives the UI badge, no fetch at render)',
                 `pending_action`      ENUM('none','install','update') NOT NULL DEFAULT 'none' COMMENT 'Queued action for the cron worker to apply',
                 `last_result`         ENUM('none','ok','error','pending') NOT NULL DEFAULT 'none' COMMENT 'Outcome of the most recent install/update attempt',
                 `last_error`          VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic last error message (no secrets)',
                 `last_check_at`       DATETIME     NULL DEFAULT NULL COMMENT 'When the source was last checked for updates',
                 `last_install_at`     DATETIME     NULL DEFAULT NULL COMMENT 'When an install/update last succeeded',
+                `last_notified_sha`   VARCHAR(64)  NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)',
+                `last_notified_at`    DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest',
                 PRIMARY KEY (`id`),
-                UNIQUE KEY `uniq_source` (`plugin_gitplugins_sources_id`),
-                KEY `idx_plugin_key` (`plugin_key`),
+                UNIQUE KEY `uniq_plugin_key` (`plugin_key`),
+                KEY `idx_source`     (`plugin_gitplugins_sources_id`),
+                KEY `idx_update`     (`update_available`),
                 KEY `idx_pending`    (`pending_action`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Per-source install state: installed vs available version/SHA and pending action'"
         );
@@ -101,6 +105,8 @@ function plugin_gitplugins_install(): bool
                 `max_download_mb`      SMALLINT UNSIGNED NOT NULL DEFAULT 50 COMMENT 'Max archive download size in MB (clamped 1..500)',
                 `fetch_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 30 COMMENT 'Per-fetch network timeout in seconds (clamped 5..300)',
                 `check_frequency_minutes` SMALLINT UNSIGNED NOT NULL DEFAULT 1440 COMMENT 'Update-check cadence in minutes (clamped 5..40320)',
+                `notify_updates`       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available',
+                `notify_recipient`     VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -145,6 +151,21 @@ function plugin_gitplugins_install(): bool
         ]
     );
 
+    // Daily digest e-mail of plugins with an available update (marketplace
+    // parity). Separate task so its cadence is independent of the 5-min check.
+    CronTask::Register(
+        'PluginGitpluginsUpdatecheck',
+        'notifyUpdates',
+        DAY_TIMESTAMP,
+        [
+            'comment'      => 'Email a digest of managed plugins that have an available update',
+            'mode'         => CronTask::MODE_EXTERNAL,
+            'allowmode'    => CronTask::MODE_INTERNAL | CronTask::MODE_EXTERNAL,
+            'logslifetime' => 30,
+            'state'        => CronTask::STATE_WAITING,
+        ]
+    );
+
     return true;
 }
 
@@ -157,14 +178,50 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
     $inst = 'glpi_plugin_gitplugins_installs';
     if ($DB->tableExists($inst)) {
         $cols = [
-            'pending_action' => "ADD COLUMN `pending_action` ENUM('none','install','update') NOT NULL DEFAULT 'none' COMMENT 'Queued action for the cron worker to apply'",
-            'available_sha'  => "ADD COLUMN `available_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'Commit SHA of the available ref, when known'",
-            'installed_sha'  => "ADD COLUMN `installed_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'Commit SHA of the installed checkout, when known'",
+            'pending_action'    => "ADD COLUMN `pending_action` ENUM('none','install','update') NOT NULL DEFAULT 'none' COMMENT 'Queued action for the cron worker to apply'",
+            'available_sha'     => "ADD COLUMN `available_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'Commit SHA of the available ref, when known'",
+            'installed_sha'     => "ADD COLUMN `installed_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'Commit SHA of the installed checkout, when known'",
+            'update_available'  => "ADD COLUMN `update_available` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Cached flag: 1 when the available version/SHA differs from the installed one (drives the UI badge, no fetch at render)'",
+            'last_notified_sha' => "ADD COLUMN `last_notified_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)'",
+            'last_notified_at'  => "ADD COLUMN `last_notified_at` DATETIME NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($inst, $col)) {
                 $DB->doQuery("ALTER TABLE `{$inst}` {$ddl}");
             }
+        }
+
+        // FIX 1: install state is now keyed by plugin_key (one row per managed
+        // plugin), not by source. De-dupe any rows that share a plugin_key —
+        // keeping the most recently touched — BEFORE adding the unique key, or
+        // the ALTER would fail on duplicates. Then swap uniq_source → uniq_key.
+        if (!isIndex($inst, 'uniq_plugin_key')) {
+            // De-dupe rows sharing a plugin_key (keep the newest by id), in PHP —
+            // robust across DB iterator versions, idempotent, no HAVING needed.
+            $seen = [];
+            foreach ($DB->request(['FROM' => $inst, 'ORDER' => 'id DESC']) as $r) {
+                $k = (string) ($r['plugin_key'] ?? '');
+                if ($k === '') {
+                    continue;
+                }
+                if (isset($seen[$k])) {
+                    // A newer row for this key already kept → delete this older one.
+                    $DB->delete($inst, ['id' => (int) $r['id']]);
+                } else {
+                    $seen[$k] = (int) $r['id'];
+                }
+            }
+
+            if (isIndex($inst, 'uniq_source')) {
+                $DB->doQuery("ALTER TABLE `{$inst}` DROP INDEX `uniq_source`");
+            }
+            $DB->doQuery("ALTER TABLE `{$inst}` ADD UNIQUE KEY `uniq_plugin_key` (`plugin_key`)");
+        }
+        if (!isIndex($inst, 'idx_source')) {
+            $DB->doQuery("ALTER TABLE `{$inst}` ADD KEY `idx_source` (`plugin_gitplugins_sources_id`)");
+        }
+        if (!isIndex($inst, 'idx_update')) {
+            $DB->doQuery("ALTER TABLE `{$inst}` ADD KEY `idx_update` (`update_available`)");
         }
         if (!isIndex($inst, 'idx_pending')) {
             $DB->doQuery("ALTER TABLE `{$inst}` ADD KEY `idx_pending` (`pending_action`)");
@@ -188,6 +245,8 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         $cols = [
             'allow_downgrade'   => "ADD COLUMN `allow_downgrade` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether installing an older version than the installed one is permitted'",
             'allow_auto_install' => "ADD COLUMN `allow_auto_install` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether the cron worker may auto-install/update without manual approval'",
+            'notify_updates'    => "ADD COLUMN `notify_updates` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available'",
+            'notify_recipient'  => "ADD COLUMN `notify_recipient` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {

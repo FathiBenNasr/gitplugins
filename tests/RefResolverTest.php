@@ -212,4 +212,37 @@ final class RefResolverTest extends TestCase
         self::assertNull(PluginGitpluginsRefResolver::pickReleaseAsset([]));
         self::assertNull(PluginGitpluginsRefResolver::pickReleaseAsset(['assets' => []]));
     }
+
+    // ----- FIX 1: branch HEAD-SHA resolution (track_branch update detection) -----
+
+    public function testBranchShaApiUrlPerProvider(): void
+    {
+        self::assertSame(
+            'https://api.github.com/repos/foo/bar/branches/main',
+            PluginGitpluginsRefResolver::branchShaApiUrl('github', 'https://github.com/foo/bar', 'main')
+        );
+        self::assertSame(
+            'https://git.x.tn/api/v1/repos/foo/bar/branches/develop',
+            PluginGitpluginsRefResolver::branchShaApiUrl('forgejo', 'https://git.x.tn/foo/bar', 'develop')
+        );
+        self::assertSame(
+            'https://gitlab.com/api/v4/projects/foo%2Fbar/repository/branches/main',
+            PluginGitpluginsRefResolver::branchShaApiUrl('gitlab', 'https://gitlab.com/foo/bar', 'main')
+        );
+    }
+
+    public function testBranchShaApiUrlRejectsBadInput(): void
+    {
+        self::assertNull(PluginGitpluginsRefResolver::branchShaApiUrl('github', 'https://github.com/foo/bar', '../evil'));
+        self::assertNull(PluginGitpluginsRefResolver::branchShaApiUrl('github', 'http://github.com/foo/bar', 'main')); // not https
+        self::assertNull(PluginGitpluginsRefResolver::branchShaApiUrl('unknown', 'https://x.tn/foo/bar', 'main'));
+    }
+
+    public function testBranchShaExtraction(): void
+    {
+        self::assertSame('abc123', PluginGitpluginsRefResolver::branchSha(['commit' => ['sha' => 'abc123']]));
+        self::assertSame('def456', PluginGitpluginsRefResolver::branchSha(['commit' => ['id' => 'def456']]));
+        self::assertSame('', PluginGitpluginsRefResolver::branchSha([]));
+        self::assertSame('xyz', PluginGitpluginsRefResolver::branchSha(['commit' => ['sha' => "xyz\r\n"]]));
+    }
 }

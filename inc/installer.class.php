@@ -138,16 +138,25 @@ final class PluginGitpluginsInstaller
             // Drive GLPI core's public install/activate seam (marketplace-equiv).
             self::nativeInstall($key);
 
+            // FIX 1: a successful install/update clears pending_action back to
+            // 'none', stores the new installed sha/version, and clears the
+            // update_available flag — so the next check is stable and the plugin
+            // isn't re-flagged or re-queued on the following tick. Upsert by
+            // plugin_key (UNIQUE) — never a blind insert, so no duplicate rows.
             $installedVersion = self::installedVersion($key);
             $DB->updateOrInsert('glpi_plugin_gitplugins_installs', [
-                'plugin_key'        => $key,
-                'installed_version' => $installedVersion,
-                'installed_sha'     => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
-                'pending_action'    => 'none',
-                'last_result'       => 'ok',
-                'last_error'        => null,
-                'last_install_at'   => date('Y-m-d H:i:s'),
-            ], ['plugin_gitplugins_sources_id' => $sourceId]);
+                'plugin_key'                   => $key,
+                'plugin_gitplugins_sources_id' => $sourceId,
+                'installed_version'            => $installedVersion,
+                'installed_sha'                => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
+                'available_version'            => $installedVersion !== '' ? mb_substr($installedVersion, 0, 64) : null,
+                'available_sha'                => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
+                'update_available'             => 0,
+                'pending_action'               => 'none',
+                'last_result'                  => 'ok',
+                'last_error'                   => null,
+                'last_install_at'              => date('Y-m-d H:i:s'),
+            ], ['plugin_key' => $key]);
 
             PluginGitpluginsLog::record($sourceId, 'install', 'ok', 'installed ' . $key, $resolvedRef, $resolvedSha);
 
@@ -187,12 +196,15 @@ final class PluginGitpluginsInstaller
         /** @var DBmysql $DB */
         global $DB;
 
+        // Upsert by plugin_key (UNIQUE) so a failed attempt doesn't spawn a
+        // duplicate row. Clears pending so the cron doesn't retry endlessly.
         $DB->updateOrInsert('glpi_plugin_gitplugins_installs', [
-            'plugin_key'     => $key,
-            'pending_action' => 'none',
-            'last_result'    => 'error',
-            'last_error'     => mb_substr($reason, 0, 255),
-        ], ['plugin_gitplugins_sources_id' => $sourceId]);
+            'plugin_key'                   => $key,
+            'plugin_gitplugins_sources_id' => $sourceId,
+            'pending_action'               => 'none',
+            'last_result'                  => 'error',
+            'last_error'                   => mb_substr($reason, 0, 255),
+        ], ['plugin_key' => $key]);
         PluginGitpluginsLog::record($sourceId, 'install', 'error', $reason);
     }
 

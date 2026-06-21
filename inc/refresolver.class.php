@@ -285,4 +285,56 @@ final class PluginGitpluginsRefResolver
             default            => null,
         };
     }
+
+    /**
+     * Build the API URL that returns a single branch's current HEAD commit SHA,
+     * used by the track_branch policy to detect whether the branch has moved
+     * (FIX 1: flag an update only when the SHA actually differs). Pure URL
+     * construction only; the fetch (SSRF-guarded) lives in the cron. Returns null
+     * for an invalid ref/host/provider.
+     *
+     * GitHub : api.github.com/repos/{repo}/branches/{branch}      → .commit.sha
+     * Gitea/Forgejo : {host}/api/v1/repos/{repo}/branches/{branch} → .commit.id
+     * GitLab : {host}/api/v4/projects/{repo}/repository/branches/{branch} → .commit.id
+     */
+    public static function branchShaApiUrl(string $provider, string $url, string $branch): ?string
+    {
+        if (!self::isValidRef($branch)) {
+            return null;
+        }
+        $repo = self::repoPath($url);
+        if ($repo === null) {
+            return null;
+        }
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || $host === '') {
+            return null;
+        }
+        $encRef = rawurlencode($branch);
+
+        return match ($provider) {
+            'github'           => "https://api.github.com/repos/{$repo}/branches/{$encRef}",
+            'gitlab'           => sprintf('https://%s/api/v4/projects/%s/repository/branches/%s', $host, rawurlencode($repo), $encRef),
+            'gitea', 'forgejo' => sprintf('https://%s/api/v1/repos/%s/branches/%s', $host, $repo, $encRef),
+            default            => null,
+        };
+    }
+
+    /**
+     * Extract the commit SHA from a decoded "single branch" API response — PURE.
+     * Handles GitHub ({commit:{sha}}) and Gitea/Forgejo/GitLab ({commit:{id}}).
+     * Returns '' when absent. CR/LF/NUL-stripped.
+     *
+     * @param array<string,mixed> $branch decoded branch object
+     */
+    public static function branchSha(array $branch): string
+    {
+        $commit = $branch['commit'] ?? null;
+        $sha    = '';
+        if (is_array($commit)) {
+            $sha = (string) ($commit['sha'] ?? $commit['id'] ?? '');
+        }
+
+        return str_replace(["\r", "\n", "\0"], '', trim($sha));
+    }
 }
