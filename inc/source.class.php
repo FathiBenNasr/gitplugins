@@ -40,10 +40,11 @@ class PluginGitpluginsSource extends CommonDBTM
             'page'  => $root . '/front/source.php',
             'icon'  => self::getIcon(),
             'links' => [
-                __('Sources', 'gitplugins')       => $root . '/front/source.php',
-                "<i class='ti ti-plus'></i>"      => $root . '/front/source.form.php',
-                __('Status', 'gitplugins')         => $root . '/front/status.php',
-                __('Configuration', 'gitplugins')  => $root . '/front/config.php',
+                __('Sources', 'gitplugins')            => $root . '/front/source.php',
+                "<i class='ti ti-plus'></i>"           => $root . '/front/source.form.php',
+                __('Installed plugins', 'gitplugins')  => $root . '/front/discovered.php',
+                __('Status', 'gitplugins')             => $root . '/front/status.php',
+                __('Configuration', 'gitplugins')      => $root . '/front/config.php',
             ],
         ];
     }

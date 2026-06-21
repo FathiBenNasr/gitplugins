@@ -232,3 +232,60 @@ msgstr "Last check"
 
 msgid "Last result"
 msgstr "Last result"
+
+msgid "Installed plugins"
+msgstr "Installed plugins"
+
+msgid "Installed plugins with a declared git source"
+msgstr "Installed plugins with a declared git source"
+
+msgid "Read from each installed plugin's own plugin.xml. No network request is made here; registering only stores the declared source — fetch/install happens later via the installer."
+msgstr "Read from each installed plugin's own plugin.xml. No network request is made here; registering only stores the declared source — fetch/install happens later via the installer."
+
+msgid "Plugin"
+msgstr "Plugin"
+
+msgid "Repository"
+msgstr "Repository"
+
+msgid "Ref"
+msgstr "Ref"
+
+msgid "Visibility"
+msgstr "Visibility"
+
+msgid "private"
+msgstr "private"
+
+msgid "public"
+msgstr "public"
+
+msgid "latest"
+msgstr "latest"
+
+msgid "Check update / Reinstall"
+msgstr "Check update / Reinstall"
+
+msgid "Register as managed source"
+msgstr "Register as managed source"
+
+msgid "No installed plugin declares a git update source."
+msgstr "No installed plugin declares a git update source."
+
+msgid "Invalid plugin key."
+msgstr "Invalid plugin key."
+
+msgid "No declared git source found for this plugin."
+msgstr "No declared git source found for this plugin."
+
+msgid "This plugin already has a managed source."
+msgstr "This plugin already has a managed source."
+
+msgid "The declared repository URL must be an https:// URL."
+msgstr "The declared repository URL must be an https:// URL."
+
+msgid "Source registered. Add the private-repo token to enable fetching."
+msgstr "Source registered. Add the private-repo token to enable fetching."
+
+msgid "Source registered as managed."
+msgstr "Source registered as managed."
