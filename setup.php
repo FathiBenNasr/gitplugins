@@ -49,6 +49,9 @@ function plugin_init_gitplugins(): void
 
     // Update-check + deferred install runner. allowmode = both so it runs under
     // web-cron AND CLI cron; network work stays OUT of the web request.
+    // One itemtype, two cron methods (checkUpdates + notifyUpdates). GLPI auto-
+    // registers a CronTask per cronXxx method on the listed itemtype; the
+    // install hook also Registers them explicitly with their cadences/comments.
     $PLUGIN_HOOKS['cron']['gitplugins'] = [
         'PluginGitpluginsUpdatecheck' => [
             'frequency'    => HOUR_TIMESTAMP,

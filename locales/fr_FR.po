@@ -364,3 +364,40 @@ msgstr "Dernière release pré-compilée (asset .tgz)"
 
 msgid "The release tag is not a valid ref."
 msgstr "Le tag de release n'est pas une référence valide."
+
+msgid "%d managed plugin has an update available"
+msgid_plural "%d managed plugins have updates available"
+msgstr[0] "%d plugin géré a une mise à jour disponible"
+msgstr[1] "%d plugins gérés ont des mises à jour disponibles"
+
+msgid "%d managed plugin has an update available."
+msgid_plural "%d managed plugins have updates available."
+msgstr[0] "%d plugin géré a une mise à jour disponible."
+msgstr[1] "%d plugins gérés ont des mises à jour disponibles."
+
+msgid "Update available: %1$s → %2$s"
+msgstr "Mise à jour disponible : %1$s → %2$s"
+
+msgid "update available"
+msgstr "mise à jour disponible"
+
+msgid "The following git-managed plugins have an update available:"
+msgstr "Les plugins gérés via git suivants ont une mise à jour disponible :"
+
+msgid "Review and apply updates from the Git Plugin Installer status page."
+msgstr "Consultez et appliquez les mises à jour depuis la page d'état de l'Installateur de plugins Git."
+
+msgid "Email a digest when managed plugins have updates available"
+msgstr "Envoyer un résumé par e-mail lorsque des mises à jour sont disponibles pour les plugins gérés"
+
+msgid "Digest recipient (optional)"
+msgstr "Destinataire du résumé (facultatif)"
+
+msgid "Defaults to Super-Admin users / GLPI admin email"
+msgstr "Par défaut : les utilisateurs Super-Admin / l'e-mail admin GLPI"
+
+msgid "Leave blank to email all active Super-Admin users (or the GLPI admin email)."
+msgstr "Laissez vide pour envoyer à tous les utilisateurs Super-Admin actifs (ou à l'e-mail admin GLPI)."
+
+msgid "Email a digest of managed plugins that have an available update"
+msgstr "Envoyer par e-mail un résumé des plugins gérés ayant une mise à jour disponible"

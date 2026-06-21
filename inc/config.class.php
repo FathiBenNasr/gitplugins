@@ -108,6 +108,18 @@ final class PluginGitpluginsConfig
         return max(5, min(40320, (int) ($this->row['check_frequency_minutes'] ?? 1440)));
     }
 
+    /** Whether the digest cron e-mails admins about available updates (default on). */
+    public function notifyUpdates(): bool
+    {
+        return (bool) ($this->row['notify_updates'] ?? true);
+    }
+
+    /** Optional explicit digest recipient override ('' = fall back to Super-Admins). */
+    public function getNotifyRecipient(): string
+    {
+        return trim((string) ($this->row['notify_recipient'] ?? ''));
+    }
+
     /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
@@ -131,6 +143,12 @@ final class PluginGitpluginsConfig
             $hosts = ['github.com', 'api.github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com', 'gitlab.com', 'git.convergent.tn'];
         }
 
+        // Digest recipient override: validate as an e-mail, CR/LF-strip; blank ok.
+        $recipient = str_replace(["\r", "\n", "\0"], '', trim((string) ($post['notify_recipient'] ?? '')));
+        if ($recipient !== '' && !filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+            $recipient = '';
+        }
+
         $data = [
             'allowed_hosts'          => json_encode(array_values($hosts)),
             'allow_auto_install'     => isset($post['allow_auto_install']) ? 1 : 0,
@@ -138,6 +156,8 @@ final class PluginGitpluginsConfig
             'max_download_mb'        => max(1, min(500, (int) ($post['max_download_mb'] ?? 50))),
             'fetch_timeout_seconds'  => max(5, min(300, (int) ($post['fetch_timeout_seconds'] ?? 30))),
             'check_frequency_minutes' => max(5, min(40320, (int) ($post['check_frequency_minutes'] ?? 1440))),
+            'notify_updates'         => isset($post['notify_updates']) ? 1 : 0,
+            'notify_recipient'       => $recipient !== '' ? mb_substr($recipient, 0, 255) : null,
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;

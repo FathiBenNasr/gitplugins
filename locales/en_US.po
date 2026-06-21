@@ -364,3 +364,40 @@ msgstr "Latest built release (.tgz asset)"
 
 msgid "The release tag is not a valid ref."
 msgstr "The release tag is not a valid ref."
+
+msgid "%d managed plugin has an update available"
+msgid_plural "%d managed plugins have updates available"
+msgstr[0] "%d managed plugin has an update available"
+msgstr[1] "%d managed plugins have updates available"
+
+msgid "%d managed plugin has an update available."
+msgid_plural "%d managed plugins have updates available."
+msgstr[0] "%d managed plugin has an update available."
+msgstr[1] "%d managed plugins have updates available."
+
+msgid "Update available: %1$s → %2$s"
+msgstr "Update available: %1$s → %2$s"
+
+msgid "update available"
+msgstr "update available"
+
+msgid "The following git-managed plugins have an update available:"
+msgstr "The following git-managed plugins have an update available:"
+
+msgid "Review and apply updates from the Git Plugin Installer status page."
+msgstr "Review and apply updates from the Git Plugin Installer status page."
+
+msgid "Email a digest when managed plugins have updates available"
+msgstr "Email a digest when managed plugins have updates available"
+
+msgid "Digest recipient (optional)"
+msgstr "Digest recipient (optional)"
+
+msgid "Defaults to Super-Admin users / GLPI admin email"
+msgstr "Defaults to Super-Admin users / GLPI admin email"
+
+msgid "Leave blank to email all active Super-Admin users (or the GLPI admin email)."
+msgstr "Leave blank to email all active Super-Admin users (or the GLPI admin email)."
+
+msgid "Email a digest of managed plugins that have an available update"
+msgstr "Email a digest of managed plugins that have an available update"

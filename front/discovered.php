@@ -124,6 +124,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
 
 $discovered = PluginGitpluginsDiscovery::scan();
 
+// Stored install-state per plugin_key (one row each). The "update available"
+// badge below reads ONLY this cached flag — populated by the cron, no network at
+// render (marketplace parity; lesson #7/#11).
+$installs = [];
+foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_installs']) as $i) {
+    $installs[(string) $i['plugin_key']] = $i;
+}
+$updateCount = 0;
+foreach ($discovered as $d) {
+    if ((int) ($installs[$d['key']]['update_available'] ?? 0) === 1) {
+        $updateCount++;
+    }
+}
+
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/discovered.php', 'config', 'PluginGitpluginsSource');
 $csrf   = Session::getNewCSRFToken();
 $action = htmlspecialchars($root . '/front/discovered.php');
@@ -132,6 +146,11 @@ $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-11">
   <h2 class="mt-3 mb-2"><?= htmlspecialchars(__('Installed plugins', 'gitplugins')) ?></h2>
   <p class="text-muted"><?= htmlspecialchars(__('Every installed plugin and its git-source status, read from each plugin\'s own plugin.xml. No network request is made here; registering or adding a source only stores it — fetch/install happens later via the installer.', 'gitplugins')) ?></p>
+<?php if ($updateCount > 0): ?>
+  <div class="alert alert-info"><i class="ti ti-cloud-download"></i>
+    <?= htmlspecialchars(sprintf(_n('%d managed plugin has an update available.', '%d managed plugins have updates available.', $updateCount, 'gitplugins'), $updateCount)) ?>
+  </div>
+<?php endif; ?>
   <table class="table table-hover card-table">
     <thead><tr>
       <th><?= htmlspecialchars(__('Plugin', 'gitplugins')) ?></th>
@@ -162,7 +181,12 @@ $any = false; foreach ($discovered as $d): $any = true;
         <td><strong><?= htmlspecialchars($d['name']) ?></strong> <code><?= htmlspecialchars($d['key']) ?></code>
           <?= $d['private'] ? ' <span class="badge bg-warning">' . htmlspecialchars(__('private', 'gitplugins')) . '</span>' : '' ?>
         </td>
-        <td><?= htmlspecialchars($d['installed_version']) ?: '<span class="text-muted">—</span>' ?></td>
+        <td><?= htmlspecialchars($d['installed_version']) ?: '<span class="text-muted">—</span>' ?>
+<?php $ist = $installs[$d['key']] ?? []; if ((int) ($ist['update_available'] ?? 0) === 1):
+    $av = (string) (($ist['available_version'] ?? '') !== '' ? $ist['available_version'] : ($ist['available_sha'] ?? '')); ?>
+          <br><span class="badge bg-info" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), $d['installed_version'] ?: '?', $av ?: '?')) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars(__('update available', 'gitplugins')) ?><?= $av !== '' ? ': ' . htmlspecialchars($av) : '' ?></span>
+<?php endif; ?>
+        </td>
         <td><?= $stateBadges[$d['state']] ?? htmlspecialchars($d['state']) ?></td>
         <td class="text-break"><?= $d['repo'] !== '' ? htmlspecialchars($d['repo']) : '<span class="text-muted">—</span>' ?></td>
         <td><?= $d['has_declaration']

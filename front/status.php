@@ -25,13 +25,28 @@ $root = PLUGIN_GITPLUGINS_ROOTDOC;
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/status.php', 'config', 'PluginGitpluginsSource');
 
 $sources = PluginGitpluginsSource::activeRows(true);
+// Install-state is keyed by plugin_key (one row per managed plugin). The badge +
+// summary count below read ONLY the stored update_available flag — no network at
+// render (the cron refreshes it; lesson #7/#11).
 $installs = [];
 foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_installs']) as $i) {
-    $installs[(int) $i['plugin_gitplugins_sources_id']] = $i;
+    $installs[(string) $i['plugin_key']] = $i;
+}
+$updateCount = 0;
+foreach ($sources as $s) {
+    $i = $installs[(string) $s['plugin_key']] ?? [];
+    if ((int) ($i['update_available'] ?? 0) === 1) {
+        $updateCount++;
+    }
 }
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-11">
   <h2 class="mt-3 mb-2"><?= htmlspecialchars(__('Managed plugin status', 'gitplugins')) ?></h2>
+<?php if ($updateCount > 0): ?>
+  <div class="alert alert-info"><i class="ti ti-cloud-download"></i>
+    <?= htmlspecialchars(sprintf(_n('%d managed plugin has an update available.', '%d managed plugins have updates available.', $updateCount, 'gitplugins'), $updateCount)) ?>
+  </div>
+<?php endif; ?>
   <table class="table table-hover card-table">
     <thead><tr>
       <th><?= htmlspecialchars(__('Plugin key', 'gitplugins')) ?></th>
@@ -43,11 +58,11 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_installs']) as $i) {
       <th></th>
     </tr></thead>
     <tbody>
-<?php $any = false; foreach ($sources as $sid => $s): $any = true; $i = $installs[(int) $sid] ?? []; ?>
-      <tr>
+<?php $any = false; foreach ($sources as $sid => $s): $any = true; $i = $installs[(string) $s['plugin_key']] ?? []; $hasUpdate = (int) ($i['update_available'] ?? 0) === 1; ?>
+      <tr<?= $hasUpdate ? ' class="table-warning"' : '' ?>>
         <td><code><?= htmlspecialchars((string) $s['plugin_key']) ?></code></td>
         <td><?= htmlspecialchars((string) ($i['installed_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
-        <td><?= htmlspecialchars((string) ($i['available_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
+        <td><?php if ($hasUpdate): ?><span class="badge bg-info" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), (string) ($i['installed_version'] ?? '?'), (string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : ($i['available_sha'] ?? '?')))) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars((string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : $i['available_sha'] ?? '')) ?></span><?php else: ?><?= htmlspecialchars((string) ($i['available_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?><?php endif; ?></td>
         <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
         <td><?= htmlspecialchars((string) ($i['last_check_at'] ?? '')) ?></td>
         <td><?= htmlspecialchars((string) ($i['last_result'] ?? 'none')) ?><?= !empty($i['last_error']) ? ' <span class="text-danger" title="' . htmlspecialchars((string) $i['last_error']) . '">!</span>' : '' ?></td>
