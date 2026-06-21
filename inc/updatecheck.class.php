@@ -64,7 +64,10 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             ])->current();
             if ($row && in_array((string) ($row['pending_action'] ?? 'none'), ['install', 'update'], true)) {
                 $ref = (string) ($resolved['ref'] ?? ($src['ref'] ?? ''));
-                if ($ref !== '') {
+                // The release policy resolves the asset (and tag) itself at fetch
+                // time, so an empty ref ("latest release") is valid for it; every
+                // other policy needs a concrete ref before we run.
+                if ($ref !== '' || (string) ($src['ref_policy'] ?? '') === 'release') {
                     PluginGitpluginsInstaller::run($src, $ref, (string) ($resolved['sha'] ?? ''));
                     $did++;
                 }
@@ -93,6 +96,18 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
                 'ref'     => $ref,
                 'version' => PluginGitpluginsVersion::normalise($ref),
                 'sha'     => $policy === 'pin_sha' ? $ref : '',
+            ];
+        }
+
+        // release → a built tarball published as a release asset. The actual
+        // asset URL + resolved tag are resolved at fetch time (installer, network)
+        // from the releases API; here we just carry the (optional) pinned tag so
+        // an empty ref means "latest release". Version is best-effort.
+        if ($policy === 'release') {
+            return [
+                'ref'     => $ref,
+                'version' => $ref !== '' ? PluginGitpluginsVersion::normalise($ref) : '',
+                'sha'     => '',
             ];
         }
 

@@ -349,3 +349,18 @@ msgstr "This repository is declared private — a token is required to fetch and
 
 msgid "You are not allowed to run detection."
 msgstr "You are not allowed to run detection."
+
+msgid "marketplace"
+msgstr "marketplace"
+
+msgid "Managed by the GLPI marketplace"
+msgstr "Managed by the GLPI marketplace"
+
+msgid "This plugin is managed by the GLPI marketplace and cannot be managed here."
+msgstr "This plugin is managed by the GLPI marketplace and cannot be managed here."
+
+msgid "Latest built release (.tgz asset)"
+msgstr "Latest built release (.tgz asset)"
+
+msgid "The release tag is not a valid ref."
+msgstr "The release tag is not a valid ref."

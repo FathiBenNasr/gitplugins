@@ -30,7 +30,7 @@ function plugin_gitplugins_install(): bool
                 `host`            VARCHAR(255) NOT NULL DEFAULT '',
                 `provider`        ENUM('github','gitlab','gitea','forgejo','unknown') NOT NULL DEFAULT 'unknown',
                 `plugin_key`      VARCHAR(64)  NOT NULL DEFAULT '',
-                `ref_policy`      ENUM('track_branch','latest_tag','pin_tag','pin_sha') NOT NULL DEFAULT 'latest_tag',
+                `ref_policy`      ENUM('track_branch','latest_tag','pin_tag','pin_sha','release') NOT NULL DEFAULT 'latest_tag',
                 `ref`             VARCHAR(255) NULL DEFAULT NULL,
                 `credential`      TEXT         NULL DEFAULT NULL,
                 `entities_id`     INT UNSIGNED NOT NULL DEFAULT 0,
@@ -107,7 +107,7 @@ function plugin_gitplugins_install(): bool
         // Conservative default allowlist (A10): only well-known hosts + our own.
         $DB->insert('glpi_plugin_gitplugins_config', [
             'id'            => 1,
-            'allowed_hosts' => json_encode(['github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'gitlab.com', 'git.convergent.tn']),
+            'allowed_hosts' => json_encode(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com', 'gitlab.com', 'git.convergent.tn']),
         ]);
     }
 
@@ -171,6 +171,17 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         }
     }
 
+    // Widen the ref_policy ENUM to include the new 'release' mode (idempotent —
+    // MODIFY is a no-op when the column already carries the value).
+    $src = 'glpi_plugin_gitplugins_sources';
+    if ($DB->tableExists($src) && $DB->fieldExists($src, 'ref_policy')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$src}` MODIFY COLUMN `ref_policy` "
+            . "ENUM('track_branch','latest_tag','pin_tag','pin_sha','release') "
+            . "NOT NULL DEFAULT 'latest_tag'"
+        );
+    }
+
     $cfg = 'glpi_plugin_gitplugins_config';
     if ($DB->tableExists($cfg)) {
         $cols = [
@@ -180,6 +191,26 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
                 $DB->doQuery("ALTER TABLE `{$cfg}` {$ddl}");
+            }
+        }
+        // Top up the host allowlist with the GitHub release-download hosts so the
+        // 'release' policy passes the SSRF host check on already-installed boxes.
+        // Only ADD missing hosts — never remove an admin's custom entries.
+        $row = $DB->request(['FROM' => $cfg, 'WHERE' => ['id' => 1], 'LIMIT' => 1])->current();
+        if ($row !== null) {
+            $hosts = json_decode((string) ($row['allowed_hosts'] ?? ''), true);
+            if (is_array($hosts)) {
+                $have = array_map(static fn ($h) => strtolower((string) $h), $hosts);
+                $add  = ['api.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com'];
+                $new  = $have;
+                foreach ($add as $h) {
+                    if (!in_array($h, $have, true)) {
+                        $new[] = $h;
+                    }
+                }
+                if (count($new) !== count($have)) {
+                    $DB->update($cfg, ['allowed_hosts' => json_encode(array_values($new))], ['id' => 1]);
+                }
             }
         }
     }

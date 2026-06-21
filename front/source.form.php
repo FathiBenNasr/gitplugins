@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $url      = PluginGitpluginsSource::normaliseUrl((string) ($_POST['url'] ?? ''));
     $key      = strtolower(preg_replace('/[^a-z0-9_]/i', '', (string) ($_POST['plugin_key'] ?? '')) ?? '');
     $policy   = (string) ($_POST['ref_policy'] ?? 'latest_tag');
-    $allowed  = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha'];
+    $allowed  = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha', 'release'];
     $ref      = trim((string) ($_POST['ref'] ?? ''));
 
     // Server-side validation (A03/ASVS): HTTPS URL, valid key, valid policy/ref.
@@ -52,8 +52,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($policy, $allowed, true)) {
         $policy = 'latest_tag';
     }
-    if ($policy !== 'latest_tag' && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
+    // latest_tag and release resolve a ref themselves (latest tag / latest
+    // release), so a ref is optional for both; release additionally accepts an
+    // explicit tag to pin a specific release. The pinned policies require a ref.
+    $refOptional = in_array($policy, ['latest_tag', 'release'], true);
+    if (!$refOptional && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
         $errors[] = __('A valid ref (branch, tag or commit SHA) is required for this policy.', 'gitplugins');
+    }
+    if ($policy === 'release' && $ref !== '' && !PluginGitpluginsRefResolver::isValidRef($ref)) {
+        $errors[] = __('The release tag is not a valid ref.', 'gitplugins');
     }
     // Host allowlist enforcement at save time (A10 defence in depth).
     $host = PluginGitpluginsSource::hostOf($url);
@@ -127,6 +134,7 @@ $csrf   = Session::getNewCSRFToken();
 $action = htmlspecialchars($root . '/front/source.form.php');
 $policies = [
     'latest_tag'   => __('Latest release tag', 'gitplugins'),
+    'release'      => __('Latest built release (.tgz asset)', 'gitplugins'),
     'track_branch' => __('Track a branch', 'gitplugins'),
     'pin_tag'      => __('Pin to a tag', 'gitplugins'),
     'pin_sha'      => __('Pin to a commit SHA', 'gitplugins'),

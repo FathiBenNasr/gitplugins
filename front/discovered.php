@@ -59,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
         Session::addMessageAfterRedirect(__('This plugin already has a managed source.', 'gitplugins'));
         Html::redirect($root . '/front/discovered.php');
     }
+    // A01: never register / manage a marketplace-managed plugin — GLPI owns it.
+    if (!empty($declared['is_marketplace'])) {
+        Session::addMessageAfterRedirect(__('This plugin is managed by the GLPI marketplace and cannot be managed here.', 'gitplugins'), false, ERROR);
+        Html::redirect($root . '/front/discovered.php');
+    }
 
     $url = PluginGitpluginsSource::normaliseUrl($declared['repo']);
     // Enforce the same SSRF/allowlist policy as a hand-entered source (A10).
@@ -140,9 +145,10 @@ $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
     <tbody>
 <?php
 $stateBadges = [
-    'managed'  => '<span class="badge bg-success">' . htmlspecialchars(__('managed', 'gitplugins')) . '</span>',
-    'declared' => '<span class="badge bg-info">' . htmlspecialchars(__('declared', 'gitplugins')) . '</span>',
-    'none'     => '<span class="badge bg-secondary">' . htmlspecialchars(__('no source', 'gitplugins')) . '</span>',
+    'marketplace' => '<span class="badge bg-purple">' . htmlspecialchars(__('marketplace', 'gitplugins')) . '</span>',
+    'managed'     => '<span class="badge bg-success">' . htmlspecialchars(__('managed', 'gitplugins')) . '</span>',
+    'declared'    => '<span class="badge bg-info">' . htmlspecialchars(__('declared', 'gitplugins')) . '</span>',
+    'none'        => '<span class="badge bg-secondary">' . htmlspecialchars(__('no source', 'gitplugins')) . '</span>',
 ];
 $any = false; foreach ($discovered as $d): $any = true;
     // Prefilled "Add source" link: always the key; the declared URL/name too.
@@ -164,7 +170,9 @@ $any = false; foreach ($discovered as $d): $any = true;
             : '<span class="text-muted">—</span>' ?></td>
         <td><?= $d['provider'] !== '' ? htmlspecialchars($d['provider']) : '<span class="text-muted">—</span>' ?></td>
         <td class="text-end">
-<?php if ($d['state'] === 'managed'): ?>
+<?php if ($d['state'] === 'marketplace'): ?>
+          <span class="text-muted"><i class="ti ti-lock"></i> <?= htmlspecialchars(__('Managed by the GLPI marketplace', 'gitplugins')) ?></span>
+<?php elseif ($d['state'] === 'managed'): ?>
           <a class="btn btn-sm btn-outline-primary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $d['managed_source_id']) ?>"><?= htmlspecialchars(__('Check update / Reinstall', 'gitplugins')) ?></a>
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.form.php?id=' . (int) $d['managed_source_id']) ?>"><?= htmlspecialchars(__('Edit source', 'gitplugins')) ?></a>
 <?php elseif ($canUpd && $d['state'] === 'declared'): ?>

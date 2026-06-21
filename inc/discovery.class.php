@@ -26,17 +26,31 @@ final class PluginGitpluginsDiscovery
      * Decide, from a single plugin's manifest + managed-source presence, the
      * source-status for the discovery UI. PURE (no I/O) so it is unit-testable.
      *
+     *  - 'marketplace' : the plugin lives under GLPI's own marketplace directory,
+     *                    so it is managed by GLPI's marketplace updater — gitplugins
+     *                    defers entirely and offers NO actions (read-only). Wins over
+     *                    everything else: we must never fight the marketplace updater.
      *  - 'managed'  : a gitplugins source already exists for this plugin key
      *                 (offer Check update / Reinstall) — takes priority
      *  - 'declared' : the plugin declares a usable <gitupdate> but is not yet
      *                 managed (offer Check update / Add source, prefilled)
      *  - 'none'     : no usable <gitupdate> declaration (offer a bare Add source)
      *
+     * The marketplace decision is passed in as a plain bool (resolved by the I/O
+     * helper isMarketplacePlugin()) so this stays pure and unit-testable — no
+     * globals/constants are touched here (lesson #12).
+     *
      * @param array|null $manifest         result of PluginGitpluginsManifest::parseXml()
      * @param bool       $hasManagedSource whether a managed source row exists
+     * @param bool       $isMarketplace    whether the plugin dir is under the
+     *                                      GLPI marketplace directory
      */
-    public static function decideState(?array $manifest, bool $hasManagedSource): string
+    public static function decideState(?array $manifest, bool $hasManagedSource, bool $isMarketplace = false): string
     {
+        // Marketplace-managed plugins are off-limits to gitplugins (read-only).
+        if ($isMarketplace) {
+            return 'marketplace';
+        }
         if ($hasManagedSource) {
             return 'managed';
         }
@@ -45,6 +59,74 @@ final class PluginGitpluginsDiscovery
         }
 
         return 'declared';
+    }
+
+    /**
+     * PURE: decide whether a resolved plugin directory sits under the GLPI
+     * marketplace directory rather than the manual plugins/ directory. Caller
+     * resolves the three paths (via Plugin::getPhpDir / GLPI_MARKETPLACE_DIR /
+     * GLPI_ROOT.'/plugins') and feeds them in, so this is testable without GLPI.
+     *
+     * Compares normalised absolute prefixes: a dir is "marketplace" when it is the
+     * marketplace dir itself or a child of it. A plugins-dir match takes precedence
+     * (a box could nest, but the manual plugins/ dir is what gitplugins manages).
+     *
+     * @param string $resolvedDir    the plugin's real on-disk directory ('' = unknown)
+     * @param string $marketplaceDir GLPI marketplace dir ('' = not defined)
+     * @param string $pluginsDir     GLPI manual plugins dir ('' = not defined)
+     */
+    public static function isMarketplaceDir(string $resolvedDir, string $marketplaceDir, string $pluginsDir): bool
+    {
+        $norm = static fn (string $p): string => rtrim(str_replace('\\', '/', trim($p)), '/');
+        $dir  = $norm($resolvedDir);
+        $mkt  = $norm($marketplaceDir);
+        $plg  = $norm($pluginsDir);
+        if ($dir === '' || $mkt === '') {
+            return false;
+        }
+        $under = static fn (string $child, string $parent): bool =>
+            $parent !== '' && ($child === $parent || str_starts_with($child . '/', $parent . '/'));
+
+        // If it is under the manual plugins/ dir, gitplugins manages it (not mkt).
+        if ($under($dir, $plg)) {
+            return false;
+        }
+
+        return $under($dir, $mkt);
+    }
+
+    /**
+     * I/O: is an installed plugin managed by GLPI's marketplace (i.e. its real
+     * directory is under GLPI_MARKETPLACE_DIR)? Resolves the real path via
+     * Plugin::getPhpDir($key) when available, else our own dirFor(), then defers
+     * the decision to the pure isMarketplaceDir(). Degrades to false where there
+     * is no GLPI core (this dev tree) — nothing is treated as marketplace-managed.
+     */
+    public static function isMarketplacePlugin(string $key, string $fallbackDir = ''): bool
+    {
+        if (!defined('GLPI_MARKETPLACE_DIR')) {
+            return false; // no marketplace concept available → manage normally
+        }
+        $marketplaceDir = (string) GLPI_MARKETPLACE_DIR;
+        $pluginsDir     = defined('GLPI_ROOT') ? GLPI_ROOT . '/plugins' : '';
+        if (!@is_dir($marketplaceDir)) {
+            return false;
+        }
+
+        // Prefer GLPI's own real-path resolver; fall back to a known directory.
+        $dir = '';
+        if (class_exists('Plugin') && method_exists('Plugin', 'getPhpDir')) {
+            try {
+                $dir = (string) \Plugin::getPhpDir($key, true);
+            } catch (\Throwable $e) {
+                $dir = '';
+            }
+        }
+        if ($dir === '' || !@is_dir($dir)) {
+            $dir = $fallbackDir !== '' ? $fallbackDir : self::dirFor($key);
+        }
+
+        return self::isMarketplaceDir($dir, $marketplaceDir, $pluginsDir);
     }
 
     /**
@@ -148,7 +230,8 @@ final class PluginGitpluginsDiscovery
      * @return array<int,array{
      *   key:string,name:string,installed_version:string,
      *   repo:string,ref:string,ref_type:string,provider:string,private:bool,
-     *   has_declaration:bool,has_managed_source:bool,managed_source_id:?int,state:string
+     *   has_declaration:bool,has_managed_source:bool,managed_source_id:?int,
+     *   is_marketplace:bool,state:string
      * }>
      */
     public static function scan(): array
@@ -165,8 +248,9 @@ final class PluginGitpluginsDiscovery
             $xml      = self::readPluginXml($plugin['dir'], $key);
             $manifest = $xml !== null ? PluginGitpluginsManifest::parseXml($xml) : null;
 
-            $managedId = $managed[$key] ?? null;
-            $hasDecl   = $manifest !== null && ($manifest['repo'] ?? '') !== '';
+            $managedId  = $managed[$key] ?? null;
+            $hasDecl    = $manifest !== null && ($manifest['repo'] ?? '') !== '';
+            $isMkt      = self::isMarketplacePlugin($key, $plugin['dir']);
             $rows[] = [
                 'key'                => $key,
                 'name'               => $plugin['name'] !== '' ? $plugin['name'] : $key,
@@ -181,7 +265,8 @@ final class PluginGitpluginsDiscovery
                 'has_declaration'    => $hasDecl,
                 'has_managed_source' => $managedId !== null,
                 'managed_source_id'  => $managedId,
-                'state'              => self::decideState($manifest, $managedId !== null),
+                'is_marketplace'     => $isMkt,
+                'state'              => self::decideState($manifest, $managedId !== null, $isMkt),
             ];
         }
 
