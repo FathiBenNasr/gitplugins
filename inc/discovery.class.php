@@ -241,16 +241,18 @@ final class PluginGitpluginsDiscovery
 
         foreach (self::installedPlugins() as $plugin) {
             $key = $plugin['key'];
-            // Never list ourselves — gitplugins does not manage gitplugins.
-            if ($key === 'gitplugins') {
+            // Skip marketplace-managed plugins entirely — GLPI's own marketplace
+            // updater handles them; listing them would only clutter the screen.
+            if (self::isMarketplacePlugin($key, $plugin['dir'])) {
                 continue;
             }
+            // gitplugins lists (and can self-update) itself too.
             $xml      = self::readPluginXml($plugin['dir'], $key);
             $manifest = $xml !== null ? PluginGitpluginsManifest::parseXml($xml) : null;
 
             $managedId  = $managed[$key] ?? null;
             $hasDecl    = $manifest !== null && ($manifest['repo'] ?? '') !== '';
-            $isMkt      = self::isMarketplacePlugin($key, $plugin['dir']);
+            $isMkt      = false;
             $rows[] = [
                 'key'                => $key,
                 'name'               => $plugin['name'] !== '' ? $plugin['name'] : $key,
