@@ -48,3 +48,18 @@ READS `glpi_plugins`. Never touches core or other plugins' tables.
 
 ## License
 GPL-2.0-or-later. © 2026 Convergent Cloud Computing (Fathi Ben Nasr).
+
+---
+
+<div align="center">
+
+## Developed by
+
+[![Convergent Cloud Computing](https://www.convergent.tn/assets/images/convergent-logo.png)](https://www.convergent.tn)
+
+**[Convergent Cloud Computing](https://www.convergent.tn)**  
+Cloud infrastructure, open-source integration, and cybersecurity solutions for Tunisian and international businesses.
+
+📧 contact@convergent.tn | 🌐 [www.convergent.tn](https://www.convergent.tn)
+
+</div>
