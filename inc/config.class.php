@@ -121,6 +121,54 @@ final class PluginGitpluginsConfig
     }
 
     /**
+     * Runtime-built dirs preserved from the old tree across an update (so an
+     * optional one-click build — e.g. assetreport's mPDF vendor/ — is not wiped).
+     * Defaults to vendor + node_modules. Only plain, safe dir names are honoured.
+     *
+     * @return string[]
+     */
+    public function getCarryOverDirs(): array
+    {
+        $raw = $this->row['carry_over_dirs'] ?? null;
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+        if (!is_array($raw)) {
+            return ['vendor', 'node_modules'];
+        }
+        $out = [];
+        foreach ($raw as $d) {
+            $d = trim((string) $d);
+            if ($d !== '' && preg_match('/^[A-Za-z0-9._-]+$/', $d)) {
+                $out[$d] = $d;
+            }
+        }
+
+        return $out === [] ? ['vendor', 'node_modules'] : array_values($out);
+    }
+
+    /** Whether to clear GLPI caches after activate (default on). */
+    public function autoCacheClear(): bool
+    {
+        return (bool) ($this->row['auto_cache_clear'] ?? true);
+    }
+
+    /** Per-build wall-clock cap for composer/npm build steps (clamped 30..1800). */
+    public function getBuildTimeoutSeconds(): int
+    {
+        return max(30, min(1800, (int) ($this->row['build_timeout_seconds'] ?? 300)));
+    }
+
+    /**
+     * Size cap (MB) for a pre-migration DB snapshot; over this we skip + warn
+     * rather than block the update. 0 = unlimited. Clamped 0..10000.
+     */
+    public function getSnapshotMaxMb(): int
+    {
+        return max(0, min(10000, (int) ($this->row['snapshot_max_mb'] ?? 100)));
+    }
+
+    /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
      */
