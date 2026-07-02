@@ -36,6 +36,7 @@ function plugin_gitplugins_install(): bool
                 `entities_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owning GLPI entity (A01 scope)',
                 `is_recursive`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether the entity scope includes sub-entities',
                 `is_active`       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Disabled sources are skipped by the update checker',
+                `build_on_install` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT 'Opt-in: run composer/npm build in the staged tree before install (runs third-party build code; OFF by default)',
                 `date_creation`   DATETIME     NULL DEFAULT NULL COMMENT 'Row creation timestamp',
                 `date_mod`        DATETIME     NULL DEFAULT NULL COMMENT 'Last modification timestamp',
                 PRIMARY KEY (`id`),
@@ -107,6 +108,10 @@ function plugin_gitplugins_install(): bool
                 `check_frequency_minutes` SMALLINT UNSIGNED NOT NULL DEFAULT 1440 COMMENT 'Update-check cadence in minutes (clamped 5..40320)',
                 `notify_updates`       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available',
                 `notify_recipient`     VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email',
+                `carry_over_dirs`      JSON         NULL DEFAULT NULL COMMENT 'JSON list of runtime-built dir names preserved across an update (default vendor + node_modules)',
+                `auto_cache_clear`     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)',
+                `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)',
+                `snapshot_max_mb`      SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -240,6 +245,14 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         );
     }
 
+    // Add the R5 per-source build opt-in on already-installed boxes.
+    if ($DB->tableExists($src) && !$DB->fieldExists($src, 'build_on_install')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$src}` ADD COLUMN `build_on_install` TINYINT(1) NOT NULL DEFAULT 0 "
+            . "COMMENT 'Opt-in: run composer/npm build in the staged tree before install (runs third-party build code; OFF by default)'"
+        );
+    }
+
     $cfg = 'glpi_plugin_gitplugins_config';
     if ($DB->tableExists($cfg)) {
         $cols = [
@@ -247,6 +260,10 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'allow_auto_install' => "ADD COLUMN `allow_auto_install` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether the cron worker may auto-install/update without manual approval'",
             'notify_updates'    => "ADD COLUMN `notify_updates` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available'",
             'notify_recipient'  => "ADD COLUMN `notify_recipient` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email'",
+            'carry_over_dirs'   => "ADD COLUMN `carry_over_dirs` JSON NULL DEFAULT NULL COMMENT 'JSON list of runtime-built dir names preserved across an update (default vendor + node_modules)'",
+            'auto_cache_clear'  => "ADD COLUMN `auto_cache_clear` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)'",
+            'build_timeout_seconds' => "ADD COLUMN `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)'",
+            'snapshot_max_mb'   => "ADD COLUMN `snapshot_max_mb` SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
