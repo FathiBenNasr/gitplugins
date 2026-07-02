@@ -88,13 +88,31 @@ final class PluginGitpluginsInstaller
             return false;
         }
 
-        $token  = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
-        $policy = (string) ($source['ref_policy'] ?? 'latest_tag');
+        $token    = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
+        $policy   = (string) ($source['ref_policy'] ?? 'latest_tag');
+        $provider = (string) ($source['provider'] ?? 'unknown');
+        $isLocal  = $provider === 'local';
 
-        // Resolve the archive URL. For the `release` policy we resolve a pre-built
-        // release asset (.tgz) via the releases API (network, SSRF-guarded); for
-        // every other policy we build the git source-tarball URL (pure).
-        if ($policy === 'release') {
+        // LOCAL source (Phase 1): no fetch — the archive URL is irrelevant. Gate
+        // hard (feature flag OFF by default + path allowlist); the actual acquire
+        // (copy into the staged dir) happens inside the try below.
+        if ($isLocal) {
+            if (!$cfg->allowLocalSources()) {
+                self::fail($sourceId, $key, 'local_sources_disabled');
+
+                return false;
+            }
+            if (!PluginGitpluginsLocalsource::pathAllowed((string) ($source['url'] ?? ''), $cfg->getLocalSourceRoots())) {
+                self::fail($sourceId, $key, 'local_path_not_allowed');
+
+                return false;
+            }
+            $archiveUrl = '';
+        } elseif ($policy === 'release') {
+            // Resolve the archive URL. For the `release` policy we resolve a
+            // pre-built release asset (.tgz) via the releases API (network,
+            // SSRF-guarded); for every other policy we build the git source-
+            // tarball URL (pure).
             try {
                 [$archiveUrl] = PluginGitpluginsFetcher::resolveReleaseAsset(
                     (string) ($source['provider'] ?? 'unknown'),
@@ -122,18 +140,29 @@ final class PluginGitpluginsInstaller
         $archive = null;
         $staged  = null;
         try {
-            $archive = PluginGitpluginsFetcher::fetch(
-                $archiveUrl,
-                $cfg->getAllowedHosts(),
-                $token,
-                $cfg->getMaxDownloadBytes(),
-                $cfg->getFetchTimeoutSeconds()
-            );
+            // Acquire the staged tree. LOCAL: copy the (allowlisted) path in, no
+            // network. Otherwise: SSRF-guarded fetch → sanitised extract.
+            if ($isLocal) {
+                $priorVersion = self::installedVersion($key);
+                $staged = PluginGitpluginsLocalsource::copyToStaged(
+                    (string) ($source['url'] ?? ''),
+                    $key,
+                    $cfg->getLocalSourceRoots()
+                );
+            } else {
+                $archive = PluginGitpluginsFetcher::fetch(
+                    $archiveUrl,
+                    $cfg->getAllowedHosts(),
+                    $token,
+                    $cfg->getMaxDownloadBytes(),
+                    $cfg->getFetchTimeoutSeconds()
+                );
 
-            // Capture the outgoing version to label the neutralised backup.
-            $priorVersion = self::installedVersion($key);
+                // Capture the outgoing version to label the neutralised backup.
+                $priorVersion = self::installedVersion($key);
 
-            $staged      = PluginGitpluginsExtractor::extractTo($archive, $key);
+                $staged = PluginGitpluginsExtractor::extractTo($archive, $key);
+            }
             $pluginsBase = self::pluginsDir();
 
             // R6 preflight gate: refuse to place a plugin this box can't run

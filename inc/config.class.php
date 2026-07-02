@@ -169,6 +169,42 @@ final class PluginGitpluginsConfig
     }
 
     /**
+     * Whether LOCAL/dev sources are permitted at all (Phase 1). OFF by default —
+     * local sources read the server filesystem, so they must be explicitly
+     * enabled and are unsafe on multi-tenant/hosted installs.
+     */
+    public function allowLocalSources(): bool
+    {
+        return (bool) ($this->row['allow_local_sources'] ?? false);
+    }
+
+    /**
+     * Absolute-path root allowlist a local source may live under. Only absolute,
+     * NUL/CRLF-free paths are honoured; empty = nothing allowed (fail closed).
+     *
+     * @return string[]
+     */
+    public function getLocalSourceRoots(): array
+    {
+        $raw = $this->row['local_source_roots'] ?? null;
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $p) {
+            $p = str_replace(["\r", "\n", "\0"], '', trim((string) $p));
+            if ($p !== '' && $p[0] === '/') {
+                $out[$p] = $p;
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
      */
@@ -197,6 +233,16 @@ final class PluginGitpluginsConfig
             $recipient = '';
         }
 
+        // Local-source roots (one absolute path per line). Only absolute,
+        // NUL/CRLF-free paths are kept; anything else is dropped (fail closed).
+        $roots = [];
+        foreach (preg_split('/[\r\n]+/', (string) ($post['local_source_roots'] ?? '')) ?: [] as $p) {
+            $p = str_replace("\0", '', trim($p));
+            if ($p !== '' && $p[0] === '/') {
+                $roots[$p] = mb_substr($p, 0, 255);
+            }
+        }
+
         $data = [
             'allowed_hosts'          => json_encode(array_values($hosts)),
             'allow_auto_install'     => isset($post['allow_auto_install']) ? 1 : 0,
@@ -206,6 +252,8 @@ final class PluginGitpluginsConfig
             'check_frequency_minutes' => max(5, min(40320, (int) ($post['check_frequency_minutes'] ?? 1440))),
             'notify_updates'         => isset($post['notify_updates']) ? 1 : 0,
             'notify_recipient'       => $recipient !== '' ? mb_substr($recipient, 0, 255) : null,
+            'allow_local_sources'    => isset($post['allow_local_sources']) ? 1 : 0,
+            'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;
