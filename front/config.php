@@ -74,6 +74,16 @@ $csrf   = Session::getNewCSRFToken();
       <input type="email" class="form-control" name="notify_recipient" value="<?= htmlspecialchars($config->getNotifyRecipient()) ?>" placeholder="<?= htmlspecialchars(__('Defaults to Super-Admin users / GLPI admin email', 'gitplugins')) ?>">
       <div class="form-text"><?= htmlspecialchars(__('Leave blank to email all active Super-Admin users (or the GLPI admin email).', 'gitplugins')) ?></div>
     </div>
+    <hr>
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" name="allow_local_sources" id="als"<?= $config->allowLocalSources() ? ' checked' : '' ?>>
+      <label class="form-check-label" for="als"><?= htmlspecialchars(__('Allow LOCAL/dev filesystem sources — reads the server filesystem; keep OFF on hosted/multi-tenant installs', 'gitplugins')) ?></label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Local source roots (one absolute path per line)', 'gitplugins')) ?></label>
+      <textarea class="form-control" name="local_source_roots" rows="3" placeholder="/srv/glpi-plugins"><?= htmlspecialchars(implode("\n", $config->getLocalSourceRoots())) ?></textarea>
+      <div class="form-text"><?= htmlspecialchars(__('A local source path must sit at or under one of these roots. Empty = local sources cannot resolve any path.', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

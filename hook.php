@@ -28,7 +28,7 @@ function plugin_gitplugins_install(): bool
                 `name`            VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Admin label for the managed repository',
                 `url`             VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Normalised git/HTTPS repository URL (CR/LF-stripped, no trailing slash)',
                 `host`            VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Lower-cased host parsed from the URL, checked against the SSRF allowlist',
-                `provider`        ENUM('github','gitlab','gitea','forgejo','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Detected forge provider, drives the API/ref-resolution strategy',
+                `provider`        ENUM('github','gitlab','gitea','forgejo','local','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Detected forge provider (or local filesystem source), drives the acquire/ref-resolution strategy',
                 `plugin_key`      VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'GLPI plugin key this source provides (matches the plugin directory/setup key)',
                 `ref_policy`      ENUM('track_branch','latest_tag','pin_tag','pin_sha','release') NOT NULL DEFAULT 'latest_tag' COMMENT 'How the target ref is resolved: track_branch|latest_tag|pin_tag|pin_sha|release',
                 `ref`             VARCHAR(255) NULL DEFAULT NULL COMMENT 'Concrete ref for the policy (branch/tag name or SHA); NULL when auto-resolved',
@@ -112,6 +112,8 @@ function plugin_gitplugins_install(): bool
                 `auto_cache_clear`     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)',
                 `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)',
                 `snapshot_max_mb`      SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)',
+                `allow_local_sources`  TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)',
+                `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -253,6 +255,15 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         );
     }
 
+    // Widen the provider ENUM to include 'local' (Phase 1). Idempotent MODIFY.
+    if ($DB->tableExists($src) && $DB->fieldExists($src, 'provider')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$src}` MODIFY COLUMN `provider` "
+            . "ENUM('github','gitlab','gitea','forgejo','local','unknown') NOT NULL DEFAULT 'unknown' "
+            . "COMMENT 'Detected forge provider (or local filesystem source), drives the acquire/ref-resolution strategy'"
+        );
+    }
+
     $cfg = 'glpi_plugin_gitplugins_config';
     if ($DB->tableExists($cfg)) {
         $cols = [
@@ -264,6 +275,8 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'auto_cache_clear'  => "ADD COLUMN `auto_cache_clear` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)'",
             'build_timeout_seconds' => "ADD COLUMN `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)'",
             'snapshot_max_mb'   => "ADD COLUMN `snapshot_max_mb` SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)'",
+            'allow_local_sources' => "ADD COLUMN `allow_local_sources` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)'",
+            'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {

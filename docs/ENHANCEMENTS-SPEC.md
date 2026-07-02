@@ -163,6 +163,16 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 1 — Local / dev source type
 
+> **STATUS (2026-07-02): IMPLEMENTED.** New `Localsource` (pure `normalisePath` +
+> `pathAllowed` allowlist check, live `copyToStaged` with realpath re-check +
+> symlink/VCS skip). `run()` branches: `provider==='local'` skips fetch and copies
+> the allowlisted path into the staged tree, then the whole Phase 0 pipeline runs
+> unchanged. `resolveLatest` reads the local plugin.xml version (no network);
+> install.php treats a same-version local re-sync as an update. Config gains
+> `allow_local_sources` (default OFF) + `local_source_roots`; sources.provider
+> gains `local`. UI: source-type toggle on the source form + config controls.
+> 9 pure allowlist tests (111 total green).
+
 - **Purpose:** register a source that points at a **local path** (our working
   dir) and sync + reinstall on demand — replacing the hand-rolled per-plugin
   `deploy.sh`.

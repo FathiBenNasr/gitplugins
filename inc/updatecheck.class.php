@@ -447,6 +447,13 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         $provider = (string) ($src['provider'] ?? 'unknown');
         $url      = (string) ($src['url'] ?? '');
 
+        // LOCAL source (Phase 1): no network. The "available" version is whatever
+        // the local working tree's plugin.xml declares (best-effort). Gated by the
+        // same feature-flag + allowlist as the install path.
+        if ($provider === 'local') {
+            return ['ref' => 'local', 'version' => self::localVersion($url, $cfg), 'sha' => ''];
+        }
+
         if ($policy === 'pin_sha' || $policy === 'pin_tag') {
             return [
                 'ref'     => $ref,
@@ -486,6 +493,30 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         }
 
         return ['ref' => $best, 'version' => PluginGitpluginsVersion::normalise($best), 'sha' => ''];
+    }
+
+    /**
+     * Read the declared version from a LOCAL source's plugin.xml (Phase 1).
+     * Filesystem read, gated by allow_local_sources + the path allowlist; returns
+     * '' when disabled, out of allowlist, missing, or unparseable.
+     */
+    private static function localVersion(string $path, PluginGitpluginsConfig $cfg): string
+    {
+        if (!$cfg->allowLocalSources()
+            || !PluginGitpluginsLocalsource::pathAllowed($path, $cfg->getLocalSourceRoots())) {
+            return '';
+        }
+        $real = @realpath($path);
+        if ($real === false || !is_file($real . '/plugin.xml')) {
+            return '';
+        }
+        $xml = @file_get_contents($real . '/plugin.xml');
+        if (!is_string($xml)) {
+            return '';
+        }
+        $info = PluginGitpluginsManifest::parseInfo($xml);
+
+        return is_array($info) ? (string) ($info['version'] ?? '') : '';
     }
 
     /**

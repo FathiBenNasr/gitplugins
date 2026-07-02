@@ -35,37 +35,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Html::redirect($root . '/front/source.php');
     }
 
-    $url      = PluginGitpluginsSource::normaliseUrl((string) ($_POST['url'] ?? ''));
+    $cfg      = PluginGitpluginsConfig::singleton();
+    $isLocal  = ($_POST['source_type'] ?? 'git') === 'local' && $cfg->allowLocalSources();
     $key      = strtolower(preg_replace('/[^a-z0-9_]/i', '', (string) ($_POST['plugin_key'] ?? '')) ?? '');
     $policy   = (string) ($_POST['ref_policy'] ?? 'latest_tag');
     $allowed  = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha', 'release'];
     $ref      = trim((string) ($_POST['ref'] ?? ''));
+    $errors   = [];
 
-    // Server-side validation (A03/ASVS): HTTPS URL, valid key, valid policy/ref.
-    $errors = [];
-    if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || PluginGitpluginsSource::hostOf($url) === '') {
-        $errors[] = __('The repository URL must be an https:// URL.', 'gitplugins');
+    if ($isLocal) {
+        // LOCAL source (Phase 1): no HTTPS/host/ref checks — the "URL" is an
+        // absolute filesystem path that MUST sit under the configured allowlist.
+        // ref_policy is irrelevant, stored as latest_tag for a stable default.
+        $url    = str_replace(["\r", "\n", "\0"], '', trim((string) ($_POST['url'] ?? '')));
+        $host   = '';
+        $policy = 'latest_tag';
+        $ref    = '';
+        if (!PluginGitpluginsLocalsource::pathAllowed($url, $cfg->getLocalSourceRoots())) {
+            $errors[] = __('The local path must be an absolute path under an allowed root (see Configuration).', 'gitplugins');
+        }
+    } else {
+        $url = PluginGitpluginsSource::normaliseUrl((string) ($_POST['url'] ?? ''));
+
+        // Server-side validation (A03/ASVS): HTTPS URL, valid policy/ref.
+        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || PluginGitpluginsSource::hostOf($url) === '') {
+            $errors[] = __('The repository URL must be an https:// URL.', 'gitplugins');
+        }
+        if (!in_array($policy, $allowed, true)) {
+            $policy = 'latest_tag';
+        }
+        // latest_tag and release resolve a ref themselves (latest tag / latest
+        // release), so a ref is optional for both; release additionally accepts
+        // an explicit tag to pin a specific release. Pinned policies require a ref.
+        $refOptional = in_array($policy, ['latest_tag', 'release'], true);
+        if (!$refOptional && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
+            $errors[] = __('A valid ref (branch, tag or commit SHA) is required for this policy.', 'gitplugins');
+        }
+        if ($policy === 'release' && $ref !== '' && !PluginGitpluginsRefResolver::isValidRef($ref)) {
+            $errors[] = __('The release tag is not a valid ref.', 'gitplugins');
+        }
+        // Host allowlist enforcement at save time (A10 defence in depth).
+        $host = PluginGitpluginsSource::hostOf($url);
+        if ($host !== '' && !in_array($host, $cfg->getAllowedHosts(), true)) {
+            $errors[] = sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host);
+        }
     }
+
     if ($key === '') {
         $errors[] = __('A plugin key (lowercase letters, digits, underscore) is required.', 'gitplugins');
-    }
-    if (!in_array($policy, $allowed, true)) {
-        $policy = 'latest_tag';
-    }
-    // latest_tag and release resolve a ref themselves (latest tag / latest
-    // release), so a ref is optional for both; release additionally accepts an
-    // explicit tag to pin a specific release. The pinned policies require a ref.
-    $refOptional = in_array($policy, ['latest_tag', 'release'], true);
-    if (!$refOptional && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
-        $errors[] = __('A valid ref (branch, tag or commit SHA) is required for this policy.', 'gitplugins');
-    }
-    if ($policy === 'release' && $ref !== '' && !PluginGitpluginsRefResolver::isValidRef($ref)) {
-        $errors[] = __('The release tag is not a valid ref.', 'gitplugins');
-    }
-    // Host allowlist enforcement at save time (A10 defence in depth).
-    $host = PluginGitpluginsSource::hostOf($url);
-    if ($host !== '' && !in_array($host, PluginGitpluginsConfig::singleton()->getAllowedHosts(), true)) {
-        $errors[] = sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host);
     }
 
     if ($errors) {
@@ -76,10 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $data = [
-        'name'       => mb_substr(PluginGitpluginsSource::normaliseUrl((string) ($_POST['name'] ?? '')) ?: $key, 0, 255),
+        'name'       => mb_substr(str_replace(["\r", "\n", "\0"], '', trim((string) ($_POST['name'] ?? ''))) ?: $key, 0, 255),
         'url'        => mb_substr($url, 0, 255),
         'host'       => mb_substr($host, 0, 255),
-        'provider'   => PluginGitpluginsSource::deriveProvider($url),
+        'provider'   => $isLocal ? 'local' : PluginGitpluginsSource::deriveProvider($url),
         'plugin_key' => mb_substr($key, 0, 64),
         'ref_policy' => $policy,
         'ref'        => $ref !== '' ? mb_substr($ref, 0, 255) : null,
@@ -139,6 +156,9 @@ $policies = [
     'pin_tag'      => __('Pin to a tag', 'gitplugins'),
     'pin_sha'      => __('Pin to a commit SHA', 'gitplugins'),
 ];
+// Local/dev sources are only offered when enabled in Configuration (Phase 1).
+$localEnabled = PluginGitpluginsConfig::singleton()->allowLocalSources();
+$curType      = (($f['provider'] ?? '') === 'local') ? 'local' : 'git';
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-8">
 <form method="post" action="<?= $action ?>" class="card mt-3">
@@ -150,13 +170,25 @@ $policies = [
       <label class="form-label"><?= htmlspecialchars(__('Display name', 'gitplugins')) ?></label>
       <input type="text" class="form-control" id="gp-name" name="name" maxlength="255" value="<?= htmlspecialchars((string) $f['name']) ?>">
     </div>
+<?php if ($localEnabled): ?>
     <div class="mb-3">
-      <label class="form-label"><?= htmlspecialchars(__('Repository URL (https only)', 'gitplugins')) ?></label>
+      <label class="form-label"><?= htmlspecialchars(__('Source type', 'gitplugins')) ?></label>
+      <select class="form-select" id="gp-type" name="source_type">
+        <option value="git"<?= $curType === 'git' ? ' selected' : '' ?>><?= htmlspecialchars(__('Git repository (HTTPS)', 'gitplugins')) ?></option>
+        <option value="local"<?= $curType === 'local' ? ' selected' : '' ?>><?= htmlspecialchars(__('Local filesystem path (dev)', 'gitplugins')) ?></option>
+      </select>
+    </div>
+<?php else: ?>
+    <input type="hidden" name="source_type" value="git">
+<?php endif; ?>
+    <div class="mb-3">
+      <label class="form-label" id="gp-url-label"><?= htmlspecialchars(__('Repository URL (https only)', 'gitplugins')) ?></label>
       <div class="input-group">
-        <input type="url" class="form-control" id="gp-url" name="url" maxlength="255" required placeholder="https://github.com/owner/repo" value="<?= htmlspecialchars((string) $f['url']) ?>">
+        <input type="text" class="form-control" id="gp-url" name="url" maxlength="255" required placeholder="https://github.com/owner/repo" value="<?= htmlspecialchars((string) $f['url']) ?>">
         <button type="button" class="btn btn-outline-primary" id="gp-detect"><i class="ti ti-search"></i> <?= htmlspecialchars(__('Detect', 'gitplugins')) ?></button>
       </div>
-      <div class="form-text"><?= htmlspecialchars(__('Only hosts on the allow-list (Configuration) are accepted. The server fetches a tarball over HTTPS — no git binary is used.', 'gitplugins')) ?></div>
+      <div class="form-text" id="gp-url-help-git"><?= htmlspecialchars(__('Only hosts on the allow-list (Configuration) are accepted. The server fetches a tarball over HTTPS — no git binary is used.', 'gitplugins')) ?></div>
+      <div class="form-text" id="gp-url-help-local" style="display:none"><?= htmlspecialchars(__('Absolute path under an allowed root (Configuration). The directory is copied and reinstalled — no network. Runs the plugin\'s own install code.', 'gitplugins')) ?></div>
       <div class="form-text"><?= htmlspecialchars(__('Paste the repository URL and click Detect to auto-fill the fields from the repository\'s plugin.xml.', 'gitplugins')) ?></div>
       <div id="gp-detect-msg" class="mt-1" role="status"></div>
     </div>
@@ -164,7 +196,7 @@ $policies = [
       <label class="form-label"><?= htmlspecialchars(__('Plugin key (directory name)', 'gitplugins')) ?></label>
       <input type="text" class="form-control" id="gp-key" name="plugin_key" maxlength="64" required pattern="[a-z0-9_]+" value="<?= htmlspecialchars((string) $f['plugin_key']) ?>">
     </div>
-    <div class="row">
+    <div class="row" id="gp-git-fields">
       <div class="col-md-6 mb-3">
         <label class="form-label"><?= htmlspecialchars(__('Ref policy', 'gitplugins')) ?></label>
         <select class="form-select" id="gp-policy" name="ref_policy">
@@ -178,7 +210,7 @@ $policies = [
         <input type="text" class="form-control" id="gp-ref" name="ref" maxlength="255" value="<?= htmlspecialchars((string) ($f['ref'] ?? '')) ?>">
       </div>
     </div>
-    <div class="mb-3">
+    <div class="mb-3" id="gp-cred-field">
       <label class="form-label"><?= htmlspecialchars(__('Private-repo token (write-only)', 'gitplugins')) ?></label>
       <input type="password" class="form-control" id="gp-cred" name="credential" autocomplete="new-password" placeholder="<?= $f['credential'] ? htmlspecialchars(__('•••••• (stored — leave blank to keep)', 'gitplugins')) : '' ?>">
 <?php if ($f['credential']): ?>
@@ -224,6 +256,30 @@ $gpDetect = [
 ?>
 <script>
 (function () {
+  // Local/dev source toggle: swap the URL field between an https repo and an
+  // absolute filesystem path, hiding the git-only controls (ref policy, token,
+  // Detect) when 'local' is selected. Server re-validates regardless.
+  var typeSel = document.getElementById('gp-type');
+  function applyType() {
+    var local = typeSel && typeSel.value === 'local';
+    var show = function (id, on) { var e = document.getElementById(id); if (e) { e.style.display = on ? '' : 'none'; } };
+    show('gp-git-fields', !local);
+    show('gp-cred-field', !local);
+    show('gp-url-help-git', !local);
+    show('gp-url-help-local', local);
+    var detect = document.getElementById('gp-detect');
+    if (detect) { detect.style.display = local ? 'none' : ''; }
+    var url = document.getElementById('gp-url');
+    if (url) {
+      url.setAttribute('placeholder', local ? '/srv/glpi-plugins/myplugin' : 'https://github.com/owner/repo');
+    }
+    var label = document.getElementById('gp-url-label');
+    if (label) {
+      label.textContent = local ? <?= json_encode(__('Local path (absolute)', 'gitplugins')) ?> : <?= json_encode(__('Repository URL (https only)', 'gitplugins')) ?>;
+    }
+  }
+  if (typeSel) { typeSel.addEventListener('change', applyType); applyType(); }
+
   var GP = <?= json_encode($gpDetect, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var btn = document.getElementById('gp-detect');
   if (!btn) { return; }

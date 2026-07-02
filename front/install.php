@@ -49,8 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // The release policy resolves its version only at fetch time, so "skip" here
     // would mean an unknown available version — let the admin (re)install/update
-    // anyway; the runner fetches the latest release tarball.
-    if ((string) ($source['ref_policy'] ?? '') === 'release' && $decision === 'skip') {
+    // anyway; the runner fetches the latest release tarball. LOCAL sources are a
+    // dev workflow where re-syncing the SAME version on demand is the whole point,
+    // so a "skip" there is also treated as a re-sync.
+    $isLocalSrc = (string) ($source['provider'] ?? '') === 'local';
+    if (($isLocalSrc || (string) ($source['ref_policy'] ?? '') === 'release') && $decision === 'skip') {
         $decision = $installed === '' ? 'install' : 'update';
     }
     if ($decision === 'skip') {
