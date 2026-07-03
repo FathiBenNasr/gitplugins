@@ -149,6 +149,27 @@ $csrf = Session::getNewCSRFToken();
 <?php endforeach; ?>
     </ul></div>
 <?php endif; ?>
+<?php
+    // Phase 8 changelog: fetch CHANGELOG.md at the resolved ref (SSRF-guarded,
+    // size-capped) and show ONLY the sections between installed and available —
+    // "what a click will change". Best-effort; silent when none is found. Rendered
+    // as escaped preformatted text (NOT raw HTML) — this is untrusted upstream
+    // content, so it must never be injected as markup.
+    $changelog = PluginGitpluginsChangelog::fetchFor(
+        $source,
+        (string) ($resolved['ref'] ?? ''),
+        $installed,
+        (string) ($resolved['version'] ?? '')
+    );
+    if (trim($changelog) !== ''):
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('What changes', 'gitplugins')) ?></h5>
+    <details open>
+      <summary class="text-muted small mb-1"><?= htmlspecialchars(__('Changelog between the installed and available version', 'gitplugins')) ?></summary>
+      <pre class="border rounded p-2 bg-body-tertiary" style="max-height:22rem;overflow:auto;white-space:pre-wrap"><?= htmlspecialchars($changelog) ?></pre>
+    </details>
+<?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
     <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue this install/update?', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>
