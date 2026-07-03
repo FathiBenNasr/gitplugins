@@ -233,6 +233,28 @@ final class PluginGitpluginsInstaller
                 throw new \RuntimeException('verify_failed');
             }
 
+            // Post-install HEALTH gate (P5): "activated" is not "working". Ask the
+            // target's own check_prerequisites()/check_config() hooks. On a hard
+            // FAIL, policy decides: 'rollback' reverts to the prior version (files
+            // + schema) and fails the run; 'flag' (default) keeps it active but
+            // records the red verdict for the admin.
+            $healthResult = PluginGitpluginsHealth::evaluate($key);
+            if ($healthResult['health'] === 'fail'
+                && $cfg->healthFailAction() === 'rollback'
+                && is_string($backupZip)
+                && PluginGitpluginsBackup::restore($backupZip, $pluginsBase, $key)) {
+                if (is_string($dbSnapshot)) {
+                    PluginGitpluginsSnapshot::restore($dbSnapshot);
+                }
+                self::nativeInstall($key);
+                @unlink($backupZip);
+                if (is_string($dbSnapshot)) {
+                    @unlink($dbSnapshot);
+                }
+                PluginGitpluginsLog::record($sourceId, 'install', 'error', 'health_failed (rolled back): ' . $healthResult['detail'], $resolvedRef, $resolvedSha);
+                throw new \RuntimeException('health_failed');
+            }
+
             // Verified healthy → retain the pre-update file backup + DB dump as a
             // rollback snapshot (P2), keeping the newest N per plugin. If retention
             // is disabled (keep=0) or there was no backup (fresh install), drop the
@@ -277,9 +299,11 @@ final class PluginGitpluginsInstaller
                 'last_result'                  => 'ok',
                 'last_error'                   => null,
                 'last_install_at'              => date('Y-m-d H:i:s'),
+                'health'                       => $healthResult['health'],
+                'health_detail'                => $healthResult['detail'] !== '' ? $healthResult['detail'] : null,
             ], ['plugin_key' => $key]);
 
-            PluginGitpluginsLog::record($sourceId, 'install', 'ok', 'installed ' . $key, $resolvedRef, $resolvedSha);
+            PluginGitpluginsLog::record($sourceId, 'install', $healthResult['health'] === 'fail' ? 'error' : 'ok', 'installed ' . $key . ' (health: ' . $healthResult['health'] . ')', $resolvedRef, $resolvedSha);
 
             return true;
         } catch (\Throwable $e) {

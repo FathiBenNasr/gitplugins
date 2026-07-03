@@ -89,6 +89,14 @@ $csrf   = Session::getNewCSRFToken();
       <input type="number" class="form-control" name="rollback_keep" min="0" max="50" value="<?= (int) $config->getRollbackKeep() ?>">
       <div class="form-text"><?= htmlspecialchars(__('Each update retains a pre-update file+DB snapshot for one-click rollback. 0 keeps none.', 'gitplugins')) ?></div>
     </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('On failed post-install health check', 'gitplugins')) ?></label>
+      <select class="form-select" name="health_fail_action">
+        <option value="flag"<?= $config->healthFailAction() === 'flag' ? ' selected' : '' ?>><?= htmlspecialchars(__('Flag red but keep the plugin active (admin decides)', 'gitplugins')) ?></option>
+        <option value="rollback"<?= $config->healthFailAction() === 'rollback' ? ' selected' : '' ?>><?= htmlspecialchars(__('Automatically roll back to the previous version', 'gitplugins')) ?></option>
+      </select>
+      <div class="form-text"><?= htmlspecialchars(__('A plugin can activate yet be misconfigured; this decides what happens when its own prerequisites/config check fails after install.', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

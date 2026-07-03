@@ -66,6 +66,8 @@ function plugin_gitplugins_install(): bool
                 `last_install_at`     DATETIME     NULL DEFAULT NULL COMMENT 'When an install/update last succeeded',
                 `last_notified_sha`   VARCHAR(64)  NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)',
                 `last_notified_at`    DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest',
+                `health`              ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation',
+                `health_detail`       VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)',
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `uniq_plugin_key` (`plugin_key`),
                 KEY `idx_source`     (`plugin_gitplugins_sources_id`),
@@ -133,6 +135,7 @@ function plugin_gitplugins_install(): bool
                 `allow_local_sources`  TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)',
                 `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
                 `rollback_keep`        SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)',
+                `health_fail_action`   ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -210,6 +213,8 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'update_available'  => "ADD COLUMN `update_available` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Cached flag: 1 when the available version/SHA differs from the installed one (drives the UI badge, no fetch at render)'",
             'last_notified_sha' => "ADD COLUMN `last_notified_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)'",
             'last_notified_at'  => "ADD COLUMN `last_notified_at` DATETIME NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest'",
+            'health'            => "ADD COLUMN `health` ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation'",
+            'health_detail'     => "ADD COLUMN `health_detail` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($inst, $col)) {
@@ -297,6 +302,7 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'allow_local_sources' => "ADD COLUMN `allow_local_sources` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)'",
             'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
             'rollback_keep'     => "ADD COLUMN `rollback_keep` SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)'",
+            'health_fail_action' => "ADD COLUMN `health_fail_action` ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {

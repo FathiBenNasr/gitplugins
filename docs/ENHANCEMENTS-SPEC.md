@@ -245,6 +245,13 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 5 — Post-install health gate
 
+> **STATUS (2026-07-02): IMPLEMENTED.** New `Health` class: pure `classify()`
+> (prereq/config check → ok|warn|fail|unknown) + live `evaluate()` calling the
+> target's `plugin_<key>_check_prerequisites()`/`_check_config()`. `run()` gates
+> after R3 verify; `health_fail_action` (config, default `flag`) → keep active +
+> red flag, or `rollback` reverts files+schema and fails. Stored on installs
+> (`health`, `health_detail`), badged on status.php. 4 pure tests; 120 total green.
+
 - **Purpose:** after install, surface the plugin's **own** health, not just
   "activated".
 - **Lesson:** `assetreport`/`glpi-sre-hub` expose `check_prerequisites()` /
