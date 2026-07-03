@@ -68,6 +68,7 @@ function plugin_gitplugins_install(): bool
                 `last_notified_at`    DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest',
                 `health`              ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation',
                 `health_detail`       VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)',
+                `hook_warnings`       JSON         NULL DEFAULT NULL COMMENT 'Cached JSON list of post-install $PLUGIN_HOOKS collisions with other active plugins (Phase 6 badge)',
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `uniq_plugin_key` (`plugin_key`),
                 KEY `idx_source`     (`plugin_gitplugins_sources_id`),
@@ -215,6 +216,7 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'last_notified_at'  => "ADD COLUMN `last_notified_at` DATETIME NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest'",
             'health'            => "ADD COLUMN `health` ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation'",
             'health_detail'     => "ADD COLUMN `health_detail` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)'",
+            'hook_warnings'     => "ADD COLUMN `hook_warnings` JSON NULL DEFAULT NULL COMMENT 'Cached JSON list of post-install \$PLUGIN_HOOKS collisions with other active plugins (Phase 6 badge)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($inst, $col)) {

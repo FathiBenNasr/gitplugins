@@ -71,7 +71,17 @@ foreach ($sources as $s) {
         $health = (string) ($i['health'] ?? 'unknown');
         $hbadge = ['ok' => 'bg-success', 'warn' => 'bg-warning', 'fail' => 'bg-danger', 'unknown' => 'bg-secondary'][$health] ?? 'bg-secondary';
 ?>
-        <td><?php if (($i['health'] ?? '') !== ''): ?><span class="badge <?= $hbadge ?>"<?= !empty($i['health_detail']) ? ' title="' . htmlspecialchars((string) $i['health_detail']) . '"' : '' ?>><?= htmlspecialchars($health) ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
+        <td><?php if (($i['health'] ?? '') !== ''): ?><span class="badge <?= $hbadge ?>"<?= !empty($i['health_detail']) ? ' title="' . htmlspecialchars((string) $i['health_detail']) . '"' : '' ?>><?= htmlspecialchars($health) ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?>
+<?php
+        // Phase 6: cached hook-collision warnings → an amber badge with the
+        // collision list in its tooltip (read-only; the install never blocks on it).
+        $hooks = json_decode((string) ($i['hook_warnings'] ?? ''), true);
+        if (is_array($hooks) && $hooks !== []):
+            $htitle = implode("\n", PluginGitpluginsHookcheck::format((string) $s['plugin_key'], $hooks));
+?>
+          <span class="badge bg-warning ms-1" title="<?= htmlspecialchars($htitle) ?>"><i class="ti ti-alert-triangle"></i> <?= htmlspecialchars(sprintf(_n('%d hook conflict', '%d hook conflicts', count($hooks), 'gitplugins'), count($hooks))) ?></span>
+<?php endif; ?>
+        </td>
         <td class="text-end">
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a>
 <?php $snaps = PluginGitpluginsRollback::rowsFor((string) $s['plugin_key']); if ($snaps): ?>

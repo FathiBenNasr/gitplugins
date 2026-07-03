@@ -273,6 +273,16 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 6 — Hook-collision detector
 
+> **STATUS (2026-07-03): IMPLEMENTED.** New `Hookcheck` class: pure `detect()`
+> over a `$PLUGIN_HOOKS`-shaped map + subject key → overlaps on the same item
+> hook + itemtype against other active plugins, honouring the `*` all-itemtypes
+> wildcard and ignoring non-item wiring hooks (`config_page`, `cron`, …); pure
+> `normaliseItemtypes`/`overlappingTypes`/`format`; live `evaluate()` reads the
+> global map. `run()` caches collisions on `installs.hook_warnings` (JSON) after
+> the health gate + logs them; status.php shows an amber "N hook conflicts" badge
+> with the list in its tooltip. Read-only introspection — never mutates another
+> plugin, never fails the install. 11 pure tests (130 total green).
+
 - **Purpose:** predict the class of failure geninventorynumber caused (its
   `pre_item_update` hook reverted `otherserial` → 500 on native inventory).
 - **Mechanism:** after install, read the newly active plugin's registered
