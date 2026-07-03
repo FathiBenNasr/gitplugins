@@ -323,6 +323,17 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 8 — Changelog surfacing
 
+> **STATUS (2026-07-03): IMPLEMENTED.** New `Changelog` class: pure
+> `parseSections()` (Keep-a-Changelog headings → version sections, tolerant of
+> `[x.y.z]`/`vX`/date suffixes, ignores non-version headings) + `sliceBetween()`
+> (sections with installed < V ≤ available; fresh-install and unknown-available
+> bounds handled; capped at 20 sections). Live `fetchFor()` fetches CHANGELOG.md
+> at the resolved ref via the SSRF-guarded `fetchText` (256 KB cap) — new pure
+> `RefResolver::rawFileUrls()` builds the raw-file candidates (safe basename
+> only) — or reads a LOCAL source's file from the allowlisted path. Rendered on
+> install.php as ESCAPED preformatted text (untrusted upstream content, never raw
+> markup). 11 pure tests (151 total green).
+
 - **Purpose:** show what changes on the confirm screen.
 - **Lesson:** every in-house plugin keeps a `CHANGELOG.md`.
 - **Mechanism:** during `resolveLatest`/confirm, fetch `CHANGELOG.md` at the
