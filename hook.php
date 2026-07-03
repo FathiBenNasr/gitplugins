@@ -116,6 +116,26 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- known_issues: curated conflict/advisory registry (Phase 7) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_known_issues')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_known_issues` (
+                `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Plugin the issue concerns (* = any plugin, a global advisory)',
+                `version_range` VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Affected version range of plugin_key (whitespace-AND comparators or A - B; empty = any)',
+                `kind`          ENUM('conflict','advisory','min_peer') NOT NULL DEFAULT 'advisory' COMMENT 'conflict (bad peer combo) | advisory (free-text warning) | min_peer (peer present but out of required range)',
+                `peer_key`      VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'The peer plugin for conflict/min_peer kinds (empty for advisory)',
+                `peer_range`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Peer version range the rule applies to (empty = any installed version)',
+                `message`       VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Generic human-readable advisory (no secrets)',
+                `source`        VARCHAR(64)  NOT NULL DEFAULT 'builtin' COMMENT 'Origin of the row (builtin = shipped seed, or a catalog id); refreshed wholesale per source',
+                `date_creation` DATETIME     NULL DEFAULT NULL COMMENT 'When the row was seeded',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`),
+                KEY `idx_source`     (`source`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Curated known-bad plugin combinations / advisories consulted at install-confirm'"
+        );
+    }
+
     // ---- single-row config (host allowlist, caps, cadence) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_config')) {
         $DB->doQuery(
@@ -149,6 +169,13 @@ function plugin_gitplugins_install(): bool
 
     // Idempotent upgrade for instances created under an earlier dev schema.
     plugin_gitplugins_migrate($DB);
+
+    // Seed / refresh the shipped known-issues registry (Phase 7). Idempotent:
+    // replaces the 'builtin' source rows wholesale, leaving any admin/catalog
+    // rows untouched. Best-effort — never fails the install.
+    if (class_exists('PluginGitpluginsKnownissues')) {
+        PluginGitpluginsKnownissues::seedFromShipped();
+    }
 
     // Grant plugin_gitplugins right (ALLSTANDARDRIGHT) ONLY to profiles that
     // already hold config UPDATE — A01: this is the highest-privilege capability
@@ -353,6 +380,7 @@ function plugin_gitplugins_uninstall(): bool
     foreach ([
         'glpi_plugin_gitplugins_logs',
         'glpi_plugin_gitplugins_snapshots',
+        'glpi_plugin_gitplugins_known_issues',
         'glpi_plugin_gitplugins_installs',
         'glpi_plugin_gitplugins_sources',
         'glpi_plugin_gitplugins_config',

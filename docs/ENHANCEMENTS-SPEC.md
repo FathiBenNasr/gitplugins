@@ -298,6 +298,18 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 7 — Conflict / known-issues registry
 
+> **STATUS (2026-07-03): IMPLEMENTED.** New `glpi_plugin_gitplugins_known_issues`
+> table + `Knownissues` class: pure `matchRange()` (whitespace-AND comparators +
+> `A - B` hyphen ranges, empty/unknown-version conservative) and `evaluate()`
+> (advisory / conflict / min_peer against the installed active-peer set), pure
+> `normaliseIssue()`. Live `load()`/`installedPeers()` (READ-only glpi_plugins) +
+> idempotent `seed()`/`seedFromShipped()` (replaces the 'builtin' source rows,
+> leaving catalog/admin rows intact). Shipped seed `data/known_issues.json`
+> (geninventorynumber advisory + glpiinventory conflict). Seeded on install;
+> surfaced on install-confirm (warning panel) and status.php (red "N known
+> issues" badge). Catalog (P10) can refresh it under its own source. 11 pure
+> tests (140 total green).
+
 - **Purpose:** warn about known-bad combinations before enabling.
 - **Mechanism:** a curated `known_issues` dataset (shipped JSON, refreshable from
   the catalog source in F10) keyed by `plugin_key` + optional version range,
