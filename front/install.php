@@ -129,6 +129,26 @@ $csrf = Session::getNewCSRFToken();
 <?php if ($pf['ok'] && empty($pf['warnings'])): ?>
     <div class="form-text"><?= htmlspecialchars(__('GLPI/PHP versions and required extensions satisfied on this host. The fetched plugin.xml is re-checked at install time.', 'gitplugins')) ?></div>
 <?php endif; ?>
+<?php
+    // Phase 7 known-issues: consult the curated registry for this plugin at its
+    // available version against the currently-installed active peers. Advisory
+    // only — every install still runs the full confirm + preflight gate.
+    $issues = PluginGitpluginsKnownissues::warningsFor(
+        (string) $source['plugin_key'],
+        (string) ($resolved['version'] ?? '')
+    );
+    if ($issues !== []):
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('Known issues', 'gitplugins')) ?>
+      <span class="badge bg-warning"><?= (int) count($issues) ?></span>
+    </h5>
+    <div class="alert alert-warning py-2 mb-0"><ul class="mb-0">
+<?php foreach ($issues as $iss): ?>
+      <li><?php if (($iss['kind'] ?? '') !== 'advisory' && ($iss['peer_key'] ?? '') !== ''): ?><span class="badge bg-secondary me-1"><?= htmlspecialchars((string) $iss['kind']) ?>: <?= htmlspecialchars((string) $iss['peer_key']) ?></span><?php endif; ?><?= htmlspecialchars((string) ($iss['message'] ?? '')) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
     <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue this install/update?', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>

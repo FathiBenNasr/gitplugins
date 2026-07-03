@@ -32,6 +32,10 @@ $installs = [];
 foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_installs']) as $i) {
     $installs[(string) $i['plugin_key']] = $i;
 }
+// Phase 7: load the known-issues registry + the active-peer set ONCE (not per
+// row) so the per-plugin advisory badge below is a pure in-memory evaluation.
+$knownIssues = PluginGitpluginsKnownissues::load();
+$activePeers = PluginGitpluginsKnownissues::installedPeers();
 $updateCount = 0;
 foreach ($sources as $s) {
     $i = $installs[(string) $s['plugin_key']] ?? [];
@@ -80,6 +84,15 @@ foreach ($sources as $s) {
             $htitle = implode("\n", PluginGitpluginsHookcheck::format((string) $s['plugin_key'], $hooks));
 ?>
           <span class="badge bg-warning ms-1" title="<?= htmlspecialchars($htitle) ?>"><i class="ti ti-alert-triangle"></i> <?= htmlspecialchars(sprintf(_n('%d hook conflict', '%d hook conflicts', count($hooks), 'gitplugins'), count($hooks))) ?></span>
+<?php endif; ?>
+<?php
+        // Phase 7: known-issue advisories for this plugin at its installed version
+        // against the active peer set → a red badge listing them in the tooltip.
+        $ki = PluginGitpluginsKnownissues::evaluate($knownIssues, (string) $s['plugin_key'], (string) ($i['installed_version'] ?? ''), $activePeers);
+        if ($ki !== []):
+            $kititle = implode("\n", array_map(static fn (array $r): string => ($r['kind'] === 'advisory' ? '' : $r['kind'] . ' (' . $r['peer_key'] . '): ') . $r['message'], $ki));
+?>
+          <span class="badge bg-danger ms-1" title="<?= htmlspecialchars($kititle) ?>"><i class="ti ti-alert-octagon"></i> <?= htmlspecialchars(sprintf(_n('%d known issue', '%d known issues', count($ki), 'gitplugins'), count($ki))) ?></span>
 <?php endif; ?>
         </td>
         <td class="text-end">
