@@ -55,6 +55,7 @@ foreach ($sources as $s) {
       <th><?= htmlspecialchars(__('Pending', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Last check', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Last result', 'gitplugins')) ?></th>
+      <th><?= htmlspecialchars(__('Health', 'gitplugins')) ?></th>
       <th></th>
     </tr></thead>
     <tbody>
@@ -66,6 +67,11 @@ foreach ($sources as $s) {
         <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
         <td><?= htmlspecialchars((string) ($i['last_check_at'] ?? '')) ?></td>
         <td><?= htmlspecialchars((string) ($i['last_result'] ?? 'none')) ?><?= !empty($i['last_error']) ? ' <span class="text-danger" title="' . htmlspecialchars((string) $i['last_error']) . '">!</span>' : '' ?></td>
+<?php
+        $health = (string) ($i['health'] ?? 'unknown');
+        $hbadge = ['ok' => 'bg-success', 'warn' => 'bg-warning', 'fail' => 'bg-danger', 'unknown' => 'bg-secondary'][$health] ?? 'bg-secondary';
+?>
+        <td><?php if (($i['health'] ?? '') !== ''): ?><span class="badge <?= $hbadge ?>"<?= !empty($i['health_detail']) ? ' title="' . htmlspecialchars((string) $i['health_detail']) . '"' : '' ?>><?= htmlspecialchars($health) ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
         <td class="text-end">
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a>
 <?php $snaps = PluginGitpluginsRollback::rowsFor((string) $s['plugin_key']); if ($snaps): ?>
@@ -83,7 +89,7 @@ foreach ($sources as $s) {
       </tr>
 <?php endforeach; ?>
 <?php if (!$any): ?>
-      <tr><td colspan="7" class="text-center text-muted"><?= htmlspecialchars(__('No managed sources yet.', 'gitplugins')) ?></td></tr>
+      <tr><td colspan="8" class="text-center text-muted"><?= htmlspecialchars(__('No managed sources yet.', 'gitplugins')) ?></td></tr>
 <?php endif; ?>
     </tbody>
   </table>

@@ -210,6 +210,14 @@ final class PluginGitpluginsConfig
         return max(0, min(50, (int) ($this->row['rollback_keep'] ?? 3)));
     }
 
+    /** Action on a FAILED post-install health check: 'flag' (default) or 'rollback'. */
+    public function healthFailAction(): string
+    {
+        $v = strtolower(trim((string) ($this->row['health_fail_action'] ?? 'flag')));
+
+        return $v === 'rollback' ? 'rollback' : 'flag';
+    }
+
     /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
@@ -261,6 +269,7 @@ final class PluginGitpluginsConfig
             'allow_local_sources'    => isset($post['allow_local_sources']) ? 1 : 0,
             'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
             'rollback_keep'          => max(0, min(50, (int) ($post['rollback_keep'] ?? 3))),
+            'health_fail_action'     => (($post['health_fail_action'] ?? 'flag') === 'rollback') ? 'rollback' : 'flag',
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;
