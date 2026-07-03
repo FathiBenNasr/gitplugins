@@ -281,6 +281,18 @@ final class PluginGitpluginsInstaller
                 }
             }
 
+            // Hook-collision detection (P6): read-only introspection of the live
+            // $PLUGIN_HOOKS map — does the just-activated plugin hook the same
+            // item hook + itemtype as another active plugin (the geninventorynumber
+            // class of bug)? Cache the collisions for the status badge; never fails
+            // the install. NOTE: the plugin's hooks are registered at init on a
+            // subsequent request, so this may be empty on the very tick that
+            // installs it — the next cron check re-populates it.
+            $hookCollisions = PluginGitpluginsHookcheck::evaluate($key);
+            if ($hookCollisions !== []) {
+                PluginGitpluginsLog::record($sourceId, 'install', 'ok', 'hook overlaps: ' . implode(' | ', PluginGitpluginsHookcheck::format($key, $hookCollisions)), $resolvedRef, $resolvedSha);
+            }
+
             // FIX 1: a successful install/update clears pending_action back to
             // 'none', stores the new installed sha/version, and clears the
             // update_available flag — so the next check is stable and the plugin
@@ -301,6 +313,7 @@ final class PluginGitpluginsInstaller
                 'last_install_at'              => date('Y-m-d H:i:s'),
                 'health'                       => $healthResult['health'],
                 'health_detail'                => $healthResult['detail'] !== '' ? $healthResult['detail'] : null,
+                'hook_warnings'                => $hookCollisions !== [] ? json_encode($hookCollisions) : null,
             ], ['plugin_key' => $key]);
 
             PluginGitpluginsLog::record($sourceId, 'install', $healthResult['health'] === 'fail' ? 'error' : 'ok', 'installed ' . $key . ' (health: ' . $healthResult['health'] . ')', $resolvedRef, $resolvedSha);
