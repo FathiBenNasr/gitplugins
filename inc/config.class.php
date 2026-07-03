@@ -204,6 +204,12 @@ final class PluginGitpluginsConfig
         return array_values($out);
     }
 
+    /** How many pre-update snapshots to retain per plugin for rollback (0..50). */
+    public function getRollbackKeep(): int
+    {
+        return max(0, min(50, (int) ($this->row['rollback_keep'] ?? 3)));
+    }
+
     /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
@@ -254,6 +260,7 @@ final class PluginGitpluginsConfig
             'notify_recipient'       => $recipient !== '' ? mb_substr($recipient, 0, 255) : null,
             'allow_local_sources'    => isset($post['allow_local_sources']) ? 1 : 0,
             'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
+            'rollback_keep'          => max(0, min(50, (int) ($post['rollback_keep'] ?? 3))),
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;

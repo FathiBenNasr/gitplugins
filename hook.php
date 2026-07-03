@@ -95,6 +95,24 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- snapshots: retained pre-update file backup + DB dump for rollback ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_snapshots')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_snapshots` (
+                `id`                INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`        VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Managed plugin key this snapshot belongs to',
+                `plugin_gitplugins_sources_id` INT UNSIGNED NULL DEFAULT NULL COMMENT 'Source the update ran from (NULL if unknown)',
+                `version`           VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'The plugin version captured (the version being replaced)',
+                `sha`               VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Installed commit SHA at capture time, when known',
+                `files_archive_path` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Absolute path to the inert out-of-web-tree file backup zip (R2)',
+                `db_dump_path`      VARCHAR(255) NULL DEFAULT NULL COMMENT 'Absolute path to the gzipped owned-tables dump (R8), when captured',
+                `date_creation`     DATETIME     NULL DEFAULT NULL COMMENT 'When the snapshot was captured',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Retained pre-update snapshots (files + owned DB tables) for one-click version rollback'"
+        );
+    }
+
     // ---- single-row config (host allowlist, caps, cadence) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_config')) {
         $DB->doQuery(
@@ -114,6 +132,7 @@ function plugin_gitplugins_install(): bool
                 `snapshot_max_mb`      SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)',
                 `allow_local_sources`  TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)',
                 `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
+                `rollback_keep`        SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -277,6 +296,7 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'snapshot_max_mb'   => "ADD COLUMN `snapshot_max_mb` SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)'",
             'allow_local_sources' => "ADD COLUMN `allow_local_sources` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)'",
             'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
+            'rollback_keep'     => "ADD COLUMN `rollback_keep` SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
@@ -315,8 +335,16 @@ function plugin_gitplugins_uninstall(): bool
 
     $DB->doQuery("DELETE FROM `glpi_profilerights` WHERE `name` = 'plugin_gitplugins'");
 
+    // Best-effort: remove retained rollback snapshot files (inert out-of-web-tree
+    // backups + DB dumps) before dropping the table that indexes them, so nothing
+    // is orphaned on disk.
+    if (class_exists('PluginGitpluginsRollback')) {
+        PluginGitpluginsRollback::purgeAll($DB);
+    }
+
     foreach ([
         'glpi_plugin_gitplugins_logs',
+        'glpi_plugin_gitplugins_snapshots',
         'glpi_plugin_gitplugins_installs',
         'glpi_plugin_gitplugins_sources',
         'glpi_plugin_gitplugins_config',

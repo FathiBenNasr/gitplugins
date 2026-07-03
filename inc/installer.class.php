@@ -233,14 +233,30 @@ final class PluginGitpluginsInstaller
                 throw new \RuntimeException('verify_failed');
             }
 
-            // Verified healthy → the backup has done its job. Retention of prior
-            // versions for user-initiated rollback is a later phase (P2); for now
-            // drop the archive + snapshot so they do not accumulate.
+            // Verified healthy → retain the pre-update file backup + DB dump as a
+            // rollback snapshot (P2), keeping the newest N per plugin. If retention
+            // is disabled (keep=0) or there was no backup (fresh install), drop the
+            // files so they do not accumulate.
+            $keep = $cfg->getRollbackKeep();
+            $retained = 0;
             if (is_string($backupZip)) {
-                @unlink($backupZip);
+                $retained = PluginGitpluginsRollback::record(
+                    $key,
+                    $sourceId,
+                    $priorVersion,        // the version being replaced (rollback target label)
+                    '',                    // prior SHA not tracked separately; version is the label
+                    $backupZip,
+                    is_string($dbSnapshot) ? $dbSnapshot : null,
+                    $keep
+                );
             }
-            if (is_string($dbSnapshot)) {
-                @unlink($dbSnapshot);
+            if ($retained === 0) {
+                if (is_string($backupZip)) {
+                    @unlink($backupZip);
+                }
+                if (is_string($dbSnapshot)) {
+                    @unlink($dbSnapshot);
+                }
             }
 
             // FIX 1: a successful install/update clears pending_action back to
@@ -279,6 +295,25 @@ final class PluginGitpluginsInstaller
                 PluginGitpluginsExtractor::rrmdir(dirname($staged));
             }
         }
+    }
+
+    /**
+     * Re-register + verify a plugin whose files/tables were just restored from a
+     * rollback snapshot (P2). Public seam for PluginGitpluginsRollback. Returns
+     * true only when the restored version is active+versioned.
+     */
+    public static function reinstallActive(string $key): bool
+    {
+        if (!preg_match('/^[a-z0-9_]+$/', $key)) {
+            return false;
+        }
+        try {
+            self::nativeInstall($key);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return self::verifyInstalled($key);
     }
 
     /** Drive the native, source-agnostic install + activate machinery. */

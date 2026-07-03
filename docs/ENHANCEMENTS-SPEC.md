@@ -193,6 +193,15 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 2 — Version rollback
 
+> **STATUS (2026-07-02): IMPLEMENTED.** New `glpi_plugin_gitplugins_snapshots`
+> table + `Rollback` class. Phase 0's per-update R2 file backup + R8 DB dump are
+> now RETAINED (not discarded) as snapshot rows; `record()` prunes to the newest
+> `rollback_keep` (config, default 3, deleting pruned files). `Rollback::to()`
+> restores files → owned tables → re-register + verify (`Installer::reinstallActive`).
+> UI: per-plugin snapshot dropdown + Rollback button on status.php; front/rollback.php
+> handler (UPDATE right, framework CSRF). Uninstall purges snapshot files.
+> `idsToPrune` is pure (5 tests; 116 total green).
+
 - **Purpose:** one-click revert a managed plugin to its previous version.
 - **Lesson:** failed migrations (OCS, geninventorynumber) needed a clean way back.
 - **Data model:** new `glpi_plugin_gitplugins_snapshots` (id, plugin_key,
