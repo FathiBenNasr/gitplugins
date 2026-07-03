@@ -84,6 +84,11 @@ $csrf   = Session::getNewCSRFToken();
       <textarea class="form-control" name="local_source_roots" rows="3" placeholder="/srv/glpi-plugins"><?= htmlspecialchars(implode("\n", $config->getLocalSourceRoots())) ?></textarea>
       <div class="form-text"><?= htmlspecialchars(__('A local source path must sit at or under one of these roots. Empty = local sources cannot resolve any path.', 'gitplugins')) ?></div>
     </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Rollback snapshots to keep (per plugin)', 'gitplugins')) ?></label>
+      <input type="number" class="form-control" name="rollback_keep" min="0" max="50" value="<?= (int) $config->getRollbackKeep() ?>">
+      <div class="form-text"><?= htmlspecialchars(__('Each update retains a pre-update file+DB snapshot for one-click rollback. 0 keeps none.', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

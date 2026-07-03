@@ -66,7 +66,20 @@ foreach ($sources as $s) {
         <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
         <td><?= htmlspecialchars((string) ($i['last_check_at'] ?? '')) ?></td>
         <td><?= htmlspecialchars((string) ($i['last_result'] ?? 'none')) ?><?= !empty($i['last_error']) ? ' <span class="text-danger" title="' . htmlspecialchars((string) $i['last_error']) . '">!</span>' : '' ?></td>
-        <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a></td>
+        <td class="text-end">
+          <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a>
+<?php $snaps = PluginGitpluginsRollback::rowsFor((string) $s['plugin_key']); if ($snaps): ?>
+          <form method="post" action="<?= htmlspecialchars($root . '/front/rollback.php') ?>" class="d-inline-flex gap-1 align-items-center ms-1" onsubmit="return confirm('<?= htmlspecialchars(__('Roll back this plugin to the selected snapshot? Live plugin code and its tables are replaced.', 'gitplugins')) ?>');">
+            <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars(Session::getNewCSRFToken()) ?>">
+            <select name="snapshot_id" class="form-select form-select-sm" style="width:auto">
+<?php foreach ($snaps as $snap): ?>
+              <option value="<?= (int) $snap['id'] ?>"><?= htmlspecialchars((string) ($snap['version'] ?? '?')) ?> · <?= htmlspecialchars((string) ($snap['date_creation'] ?? '')) ?></option>
+<?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-warning"><i class="ti ti-arrow-back-up"></i> <?= htmlspecialchars(__('Rollback', 'gitplugins')) ?></button>
+          </form>
+<?php endif; ?>
+        </td>
       </tr>
 <?php endforeach; ?>
 <?php if (!$any): ?>
