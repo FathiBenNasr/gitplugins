@@ -100,6 +100,35 @@ $csrf = Session::getNewCSRFToken();
       <dt class="col-sm-4"><?= htmlspecialchars(__('Installed version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars($installed ?: __('not installed', 'gitplugins')) ?></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Available version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) ($resolved['version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></dd>
     </dl>
+<?php
+    // Phase 4 preflight report: "will this install cleanly here?" — reuses the R6
+    // gate function against the host. Requirements from this plugin's known-needs
+    // heuristic (the fetched plugin.xml refines them at install time).
+    $pf = PluginGitpluginsPreflight::checkEnvironment(
+        PluginGitpluginsPreflight::requirementsFor([], (string) $source['plugin_key'])
+    );
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('Environment preflight', 'gitplugins')) ?>
+      <?php if ($pf['ok']): ?><span class="badge bg-success"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span><?php else: ?><span class="badge bg-danger"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span><?php endif; ?>
+    </h5>
+<?php if (!$pf['ok']): ?>
+    <div class="alert alert-danger py-2"><ul class="mb-0">
+<?php foreach ($pf['blockers'] as $b): ?>
+      <li><?= htmlspecialchars((string) $b) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
+<?php if (!empty($pf['warnings'])): ?>
+    <div class="alert alert-warning py-2"><ul class="mb-0">
+<?php foreach ($pf['warnings'] as $w): ?>
+      <li><?= htmlspecialchars((string) $w) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
+<?php if ($pf['ok'] && empty($pf['warnings'])): ?>
+    <div class="form-text"><?= htmlspecialchars(__('GLPI/PHP versions and required extensions satisfied on this host. The fetched plugin.xml is re-checked at install time.', 'gitplugins')) ?></div>
+<?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
     <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue this install/update?', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>

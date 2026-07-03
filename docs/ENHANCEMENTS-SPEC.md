@@ -237,6 +237,12 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 4 — Environment preflight (report screen)
 
+> **STATUS (2026-07-02): IMPLEMENTED (install-confirm panel).** front/install.php
+> now renders an "Environment preflight" panel from `Preflight::checkEnvironment`
+> (R6) — ready/blocked badge + blocker/warning lists — using the plugin's
+> known-needs heuristic (the fetched plugin.xml refines it at install time). The
+> standalone "Environment" tab is deferred as non-essential.
+
 - **Purpose:** human-facing "will this install cleanly here?" report.
 - **Built on:** R6 `Preflight::check`. This phase is the **UI**: a pre-install
   panel on `front/install.php` listing GLPI/PHP/extension checks with pass/warn/
