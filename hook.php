@@ -223,6 +223,22 @@ function plugin_gitplugins_install(): bool
         ]
     );
 
+    // Apply-queued-updates worker (Phase 9 bulk apply). Shorter cadence than the
+    // full check so a bulk "Update selected" applies promptly; runs the same
+    // Phase 0 pipeline, each install independently verified/rolled-back.
+    CronTask::Register(
+        'PluginGitpluginsUpdatecheck',
+        'applyUpdates',
+        15 * MINUTE_TIMESTAMP,
+        [
+            'comment'      => 'Apply plugin installs/updates queued from the bulk dry-run',
+            'mode'         => CronTask::MODE_EXTERNAL,
+            'allowmode'    => CronTask::MODE_INTERNAL | CronTask::MODE_EXTERNAL,
+            'logslifetime' => 30,
+            'state'        => CronTask::STATE_WAITING,
+        ]
+    );
+
     return true;
 }
 

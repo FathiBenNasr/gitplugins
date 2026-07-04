@@ -27,8 +27,57 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
     {
         return match ($name) {
             'notifyUpdates' => ['description' => __('Email a digest of managed plugins that have an available update', 'gitplugins')],
+            'applyUpdates'  => ['description' => __('Apply plugin installs/updates queued from the bulk dry-run (Phase 0 pipeline, each verified/rolled-back)', 'gitplugins')],
             default         => ['description' => __('Check managed git sources for updates and run pending installs', 'gitplugins')],
         };
+    }
+
+    /**
+     * Cron entry (Phase 9): apply any install/update actions queued by the admin
+     * (bulk "Update selected" or a single confirm) WITHOUT re-resolving the whole
+     * catalogue. Runs the exact same Phase 0 pipeline as the main checker — each
+     * plugin independently fetched, verified and rolled-back on failure — but on a
+     * tighter cadence so a bulk queue applies promptly. Idempotent: rows are
+     * cleared to pending_action='none' by run(). Network + install OUT of the web
+     * request (#7/#11). Returns >0 when work was applied.
+     */
+    public static function cronApplyUpdates(CronTask $task): int
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $cfg = PluginGitpluginsConfig::singleton();
+        $did = 0;
+
+        // Only rows genuinely queued for action, joined to their (active) source.
+        foreach ($DB->request([
+            'FROM'  => 'glpi_plugin_gitplugins_installs',
+            'WHERE' => ['pending_action' => ['install', 'update']],
+        ]) as $row) {
+            $key      = (string) ($row['plugin_key'] ?? '');
+            $sourceId = (int) ($row['plugin_gitplugins_sources_id'] ?? 0);
+            if ($key === '' || $sourceId <= 0) {
+                continue;
+            }
+            $src = new PluginGitpluginsSource();
+            if (!$src->getFromDB($sourceId) || (int) ($src->fields['is_active'] ?? 0) !== 1) {
+                // Source vanished/disabled — clear the stale flag so we don't spin.
+                $DB->update('glpi_plugin_gitplugins_installs', ['pending_action' => 'none'], ['plugin_key' => $key]);
+                continue;
+            }
+            $resolved = self::resolveLatest($src->fields, $cfg);
+            $ref      = (string) ($resolved['ref'] ?? ($src->fields['ref'] ?? ''));
+            if ($ref === '' && (string) ($src->fields['ref_policy'] ?? '') !== 'release') {
+                continue;
+            }
+            // run() clears pending_action and records the outcome; each install is
+            // independently verified and rolled back on failure.
+            PluginGitpluginsInstaller::run($src->fields, $ref, (string) ($resolved['sha'] ?? ''));
+            $task->addVolume(1);
+            $did++;
+        }
+
+        return $did > 0 ? 1 : 0;
     }
 
     /**

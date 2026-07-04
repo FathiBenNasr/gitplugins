@@ -346,6 +346,20 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 9 — Bulk update + dry-run
 
+> **STATUS (2026-07-04): IMPLEMENTED.** New `Planner` class: pure `buildPlanRow()`
+> (installed→available, decided action, needs_migration, preflight verdict,
+> known-issue count, selectable/blocked flags) + pure `selectableKeys()`; live
+> `plan()` builds the report NETWORK-FREE from the cron-stored availability +
+> host preflight + registry (no fetch in the web request), and `queueBulk()`
+> re-validates the POSTed selection against the live plan before queueing
+> pending_action='update'. UI: front/plan.php dry-run table (per-row checkbox +
+> select-all, action/migration/preflight/known-issue columns), front/bulk.php
+> apply handler (UPDATE right + framework CSRF), "Bulk update (dry-run)" button on
+> status.php. New `cronApplyUpdates` CronTask (15-min cadence) applies the queue
+> through the Phase 0 pipeline, each verified/rolled-back. 7 pure tests (158 total
+> green). NOTE: per-row changelog (F8) is shown on the single-plugin confirm
+> screen, not inline in the bulk table, to keep the dry-run network-free.
+
 - **Purpose:** "update all managed plugins," preview first.
 - **Mechanism:**
   - **Dry-run:** `Planner::plan(sources[])` → per plugin: installed→available
