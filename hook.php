@@ -136,6 +136,25 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- catalog: cached convergent plugin catalog (Phase 10) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_catalog` (
+                `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`  VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'GLPI plugin key from the catalog manifest',
+                `name`        VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Display name',
+                `url`         VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'HTTPS repository URL',
+                `ref_policy`  VARCHAR(32)  NOT NULL DEFAULT 'latest_tag' COMMENT 'Recommended ref policy for this plugin',
+                `category`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Grouping category',
+                `description` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Short description',
+                `updated_at`  DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last refreshed from the manifest',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`),
+                KEY `idx_category`   (`category`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Cached convergent plugin catalog (advisory browse+prefill; every install still confirmed)'"
+        );
+    }
+
     // ---- single-row config (host allowlist, caps, cadence) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_config')) {
         $DB->doQuery(
@@ -157,6 +176,7 @@ function plugin_gitplugins_install(): bool
                 `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
                 `rollback_keep`        SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)',
                 `health_fail_action`   ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback',
+                `catalog_url`          VARCHAR(255) NULL DEFAULT NULL COMMENT 'Convergent plugin catalog manifest URL (SSRF-allowlisted; advisory browse+prefill)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -348,6 +368,7 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
             'rollback_keep'     => "ADD COLUMN `rollback_keep` SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)'",
             'health_fail_action' => "ADD COLUMN `health_fail_action` ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback'",
+            'catalog_url'       => "ADD COLUMN `catalog_url` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Convergent plugin catalog manifest URL (SSRF-allowlisted; advisory browse+prefill)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
@@ -397,6 +418,7 @@ function plugin_gitplugins_uninstall(): bool
         'glpi_plugin_gitplugins_logs',
         'glpi_plugin_gitplugins_snapshots',
         'glpi_plugin_gitplugins_known_issues',
+        'glpi_plugin_gitplugins_catalog',
         'glpi_plugin_gitplugins_installs',
         'glpi_plugin_gitplugins_sources',
         'glpi_plugin_gitplugins_config',
