@@ -216,6 +216,23 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 3 — Multi-target deploy
 
+> **STATUS (2026-07-04): IMPLEMENTED — PULL model** (owner decision, resolving
+> Open Question 1). NO inbound code-execution endpoint: the origin only SERVES a
+> read-only, HMAC-signed, SHA-pinned deploy manifest; each target pulls it and
+> installs through its OWN verified Phase 0 pipeline. New
+> `glpi_plugin_gitplugins_targets` table (name + GLPIKey-encrypted shared secret,
+> reusing Source::encrypt/decryptCredential) + `Deploy` class: pure
+> `buildManifest()` (active sources with an installed version → pin_sha/pin_tag),
+> `canonicalise()` (deterministic envelope), `sign()`/`verify()` (hex HMAC-SHA256,
+> constant-time, fail-closed), `requestStringToSign()` (binds method+path+ts+
+> target), `isFresh()` (±300s replay window); live `exportForTarget()` +
+> `authenticate()`. Endpoints: `ajax/deploy.php` (machine, HMAC-authenticated,
+> read-only signed manifest, generic 403), `front/targets.php` (CRUD, secret
+> write-only). Targets button on status.php. 8 pure tests (175 total green).
+> NOTE: the target-side CONSUMER (a box pulling + applying this manifest on its
+> cron) is a documented follow-up — it needs a second live instance to
+> integration-test, so it is intentionally not shipped blind.
+
 - **Purpose:** install/update a managed plugin to **several GLPI instances**
   (e.g. dev → `servicedesk` prod) from one screen.
 - **Lesson:** we deploy to prod as a separate manual step today.
@@ -452,8 +469,9 @@ P9 → P6/P7 → P1 → P10 → P3.**
 
 ## Open questions (decide before the relevant phase)
 
-1. **P3 push vs pull.** Push endpoint (fast, riskier) or targets pull from a
-   shared source on their own cron (simpler, safer)? *Recommendation: pull.*
+1. **P3 push vs pull.** ✅ DECIDED (2026-07-04, owner): **PULL.** The origin
+   serves a read-only HMAC-signed SHA-pinned manifest; targets pull + install via
+   their own verified pipeline. No inbound code-exec endpoint. (Implemented.)
 2. **R5/P1 exec policy.** Are build scripts / local-source reads acceptable on
    the production `servicedesk` box, or restrict to a dev instance only?
 3. **P10 catalog signing.** Sign the catalog manifest (GPG/minisign) or rely on

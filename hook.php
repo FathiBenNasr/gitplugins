@@ -136,6 +136,25 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- targets: registered GLPI instances that PULL a signed deploy manifest (Phase 3) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_targets')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_targets` (
+                `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `name`          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Unique target identifier the instance signs its pull requests with',
+                `base_url`      VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Informational base URL of the target GLPI instance (pull model: the target reaches us, not vice-versa)',
+                `secret`        TEXT         NULL DEFAULT NULL COMMENT 'GLPIKey-encrypted shared HMAC secret (write-only; never logged or echoed)',
+                `is_active`     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Disabled targets cannot authenticate a pull',
+                `last_pull_at`  DATETIME     NULL DEFAULT NULL COMMENT 'When this target last successfully pulled the deploy manifest',
+                `date_creation` DATETIME     NULL DEFAULT NULL COMMENT 'Row creation timestamp',
+                `date_mod`      DATETIME     NULL DEFAULT NULL COMMENT 'Last modification timestamp',
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_name` (`name`),
+                KEY `idx_active` (`is_active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Registered GLPI targets that pull a signed, SHA-pinned deploy manifest (Phase 3, pull model)'"
+        );
+    }
+
     // ---- catalog: cached convergent plugin catalog (Phase 10) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
         $DB->doQuery(
@@ -419,6 +438,7 @@ function plugin_gitplugins_uninstall(): bool
         'glpi_plugin_gitplugins_snapshots',
         'glpi_plugin_gitplugins_known_issues',
         'glpi_plugin_gitplugins_catalog',
+        'glpi_plugin_gitplugins_targets',
         'glpi_plugin_gitplugins_installs',
         'glpi_plugin_gitplugins_sources',
         'glpi_plugin_gitplugins_config',

@@ -49,6 +49,7 @@ foreach ($sources as $s) {
     <h2 class="mb-0"><?= htmlspecialchars(__('Managed plugin status', 'gitplugins')) ?></h2>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/catalog.php') ?>"><i class="ti ti-apps"></i> <?= htmlspecialchars(__('Catalog', 'gitplugins')) ?></a>
+      <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/targets.php') ?>"><i class="ti ti-server"></i> <?= htmlspecialchars(__('Targets', 'gitplugins')) ?></a>
       <a class="btn btn-outline-primary" href="<?= htmlspecialchars($root . '/front/plan.php') ?>"><i class="ti ti-list-check"></i> <?= htmlspecialchars(__('Bulk update (dry-run)', 'gitplugins')) ?></a>
     </div>
   </div>
