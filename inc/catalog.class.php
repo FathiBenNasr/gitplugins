@@ -24,6 +24,36 @@ final class PluginGitpluginsCatalog
 {
     private const REF_POLICIES = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha', 'release'];
     private const MAX_ENTRIES  = 200;
+    private const MAX_URLS     = 20;
+
+    /**
+     * PURE: parse a newline/whitespace-separated catalog-URL list into a clean,
+     * de-duplicated set of https URLs (each must have a host). Vendor-neutral —
+     * any company points this at its own catalog manifest(s); nothing here is
+     * bound to a particular host (the SSRF allowlist still gates fetches). Capped
+     * at MAX_URLS. Unit-tested.
+     *
+     * @return string[]
+     */
+    public static function parseUrlList(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[\r\n\s]+/', trim($raw)) ?: [] as $line) {
+            $url = str_replace("\0", '', trim($line));
+            if ($url === '') {
+                continue;
+            }
+            if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || (string) parse_url($url, PHP_URL_HOST) === '') {
+                continue;
+            }
+            $out[$url] = $url;
+            if (count($out) >= self::MAX_URLS) {
+                break;
+            }
+        }
+
+        return array_values($out);
+    }
 
     /**
      * PURE: parse + validate a catalog manifest JSON string into normalised
@@ -119,10 +149,12 @@ final class PluginGitpluginsCatalog
     }
 
     /**
-     * Live: fetch the configured catalog URL (SSRF-guarded), parse, and replace
-     * the cache table wholesale. Also refreshes the known-issues registry from any
-     * catalog-declared issues under the 'catalog' source (Phase 7 feed). Best-
-     * effort — returns the number of catalog rows cached, 0 on any failure. Never
+     * Live: fetch every configured catalog URL (SSRF-guarded), parse, and refresh
+     * the cache PER SOURCE — so several catalogs (ours + another company's own)
+     * coexist and each is replaced independently. Catalog-declared known issues
+     * feed the Phase 7 registry under a per-catalog source ('catalog:<host>').
+     * Rows whose catalog no longer appears in the configured list are pruned.
+     * Best-effort — returns the total rows cached, 0 on total failure. Never
      * throws into the caller.
      */
     public static function refresh(): int
@@ -130,59 +162,73 @@ final class PluginGitpluginsCatalog
         /** @var DBmysql $DB */
         global $DB;
 
-        $cfg = PluginGitpluginsConfig::singleton();
-        $url = $cfg->getCatalogUrl();
-        if ($url === '' || !$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
+        $cfg  = PluginGitpluginsConfig::singleton();
+        $urls = $cfg->getCatalogUrls();
+        if (!$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
             return 0;
         }
 
+        // Prune cached rows from catalogs that are no longer configured.
         try {
-            // Re-validated against the host allowlist inside fetchText().
-            $body    = PluginGitpluginsFetcher::fetchText($url, $cfg->getAllowedHosts(), '', 524288, $cfg->getFetchTimeoutSeconds());
-            $entries = self::parseManifest($body);
-            if ($entries === []) {
-                return 0;
+            if ($urls === []) {
+                $DB->delete('glpi_plugin_gitplugins_catalog', ['id' => ['>', 0]]);
+            } else {
+                $DB->delete('glpi_plugin_gitplugins_catalog', ['NOT' => ['catalog_source' => $urls]]);
             }
-
-            $DB->delete('glpi_plugin_gitplugins_catalog', ['id' => ['>', 0]]);
-            $now      = date('Y-m-d H:i:s');
-            $written  = 0;
-            $catIssues = [];
-            foreach ($entries as $e) {
-                $DB->insert('glpi_plugin_gitplugins_catalog', [
-                    'plugin_key'  => $e['plugin_key'],
-                    'name'        => $e['name'],
-                    'url'         => $e['url'],
-                    'ref_policy'  => $e['ref_policy'],
-                    'category'    => $e['category'],
-                    'description' => $e['description'],
-                    'updated_at'  => $now,
-                ]);
-                $written++;
-                // Collect any catalog-declared known issues, tagging the plugin_key
-                // when the entry omitted it (so a bare {kind,message} still binds).
-                foreach ($e['known_issues'] as $iss) {
-                    if (!isset($iss['plugin_key'])) {
-                        $iss['plugin_key'] = $e['plugin_key'];
-                    }
-                    $iss['source'] = 'catalog';
-                    $catIssues[]   = $iss;
-                }
-            }
-
-            // Feed the known-issues registry from the catalog (replaces only the
-            // 'catalog' source rows; leaves 'builtin' + admin rows intact).
-            if (class_exists('PluginGitpluginsKnownissues')) {
-                PluginGitpluginsKnownissues::seed($catIssues, 'catalog');
-            }
-            PluginGitpluginsLog::record(null, 'catalog', 'ok', 'refreshed catalog: ' . $written . ' plugin(s)');
-
-            return $written;
         } catch (\Throwable $e) {
-            PluginGitpluginsLog::record(null, 'catalog', 'error', 'catalog refresh failed');
-
+            // best-effort prune
+        }
+        if ($urls === []) {
             return 0;
         }
+
+        $total = 0;
+        foreach ($urls as $url) {
+            try {
+                // Re-validated against the host allowlist inside fetchText().
+                $body    = PluginGitpluginsFetcher::fetchText($url, $cfg->getAllowedHosts(), '', 524288, $cfg->getFetchTimeoutSeconds());
+                $entries = self::parseManifest($body);
+                if ($entries === []) {
+                    continue;
+                }
+
+                // Replace only THIS catalog's cached rows (per-source refresh).
+                $DB->delete('glpi_plugin_gitplugins_catalog', ['catalog_source' => $url]);
+                $now       = date('Y-m-d H:i:s');
+                $catIssues = [];
+                foreach ($entries as $e) {
+                    $DB->insert('glpi_plugin_gitplugins_catalog', [
+                        'plugin_key'     => $e['plugin_key'],
+                        'name'           => $e['name'],
+                        'url'            => $e['url'],
+                        'ref_policy'     => $e['ref_policy'],
+                        'category'       => $e['category'],
+                        'description'    => $e['description'],
+                        'catalog_source' => mb_substr($url, 0, 255),
+                        'updated_at'     => $now,
+                    ]);
+                    $total++;
+                    foreach ($e['known_issues'] as $iss) {
+                        if (!isset($iss['plugin_key'])) {
+                            $iss['plugin_key'] = $e['plugin_key'];
+                        }
+                        $catIssues[] = $iss;
+                    }
+                }
+
+                // Feed the known-issues registry per-catalog (replaces only this
+                // catalog's rows; leaves 'builtin' + admin + other catalogs intact).
+                if (class_exists('PluginGitpluginsKnownissues')) {
+                    $host = (string) parse_url($url, PHP_URL_HOST);
+                    PluginGitpluginsKnownissues::seed($catIssues, 'catalog:' . $host);
+                }
+            } catch (\Throwable $e) {
+                PluginGitpluginsLog::record(null, 'catalog', 'error', 'catalog refresh failed for one source');
+            }
+        }
+        PluginGitpluginsLog::record(null, 'catalog', 'ok', 'refreshed ' . count($urls) . ' catalog(s): ' . $total . ' plugin(s)');
+
+        return $total;
     }
 
     /**

@@ -166,10 +166,12 @@ function plugin_gitplugins_install(): bool
                 `ref_policy`  VARCHAR(32)  NOT NULL DEFAULT 'latest_tag' COMMENT 'Recommended ref policy for this plugin',
                 `category`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Grouping category',
                 `description` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Short description',
+                `catalog_source` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'The catalog manifest URL this entry came from (multi-catalog: each source refreshes independently)',
                 `updated_at`  DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last refreshed from the manifest',
                 PRIMARY KEY (`id`),
                 KEY `idx_plugin_key` (`plugin_key`),
-                KEY `idx_category`   (`category`)
+                KEY `idx_category`   (`category`),
+                KEY `idx_catalog_source` (`catalog_source`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Cached convergent plugin catalog (advisory browse+prefill; every install still confirmed)'"
         );
     }
@@ -195,7 +197,7 @@ function plugin_gitplugins_install(): bool
                 `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
                 `rollback_keep`        SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)',
                 `health_fail_action`   ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback',
-                `catalog_url`          VARCHAR(255) NULL DEFAULT NULL COMMENT 'Convergent plugin catalog manifest URL (SSRF-allowlisted; advisory browse+prefill)',
+                `catalog_url`          TEXT         NULL DEFAULT NULL COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -372,6 +374,19 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         );
     }
 
+    // Multi-catalog: tag each cached catalog row with the manifest URL it came
+    // from, so several catalogs coexist and refresh independently (Phase 10 ext).
+    $cat = 'glpi_plugin_gitplugins_catalog';
+    if ($DB->tableExists($cat) && !$DB->fieldExists($cat, 'catalog_source')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$cat}` ADD COLUMN `catalog_source` VARCHAR(255) NOT NULL DEFAULT '' "
+            . "COMMENT 'The catalog manifest URL this entry came from (multi-catalog: each source refreshes independently)'"
+        );
+        if (!isIndex($cat, 'idx_catalog_source')) {
+            $DB->doQuery("ALTER TABLE `{$cat}` ADD KEY `idx_catalog_source` (`catalog_source`)");
+        }
+    }
+
     $cfg = 'glpi_plugin_gitplugins_config';
     if ($DB->tableExists($cfg)) {
         $cols = [
@@ -387,12 +402,20 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
             'rollback_keep'     => "ADD COLUMN `rollback_keep` SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)'",
             'health_fail_action' => "ADD COLUMN `health_fail_action` ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback'",
-            'catalog_url'       => "ADD COLUMN `catalog_url` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Convergent plugin catalog manifest URL (SSRF-allowlisted; advisory browse+prefill)'",
+            'catalog_url'       => "ADD COLUMN `catalog_url` TEXT NULL DEFAULT NULL COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
                 $DB->doQuery("ALTER TABLE `{$cfg}` {$ddl}");
             }
+        }
+        // Widen catalog_url to TEXT on boxes that added it as VARCHAR(255) before
+        // multi-catalog support (idempotent MODIFY; holds several URLs newline-sep).
+        if ($DB->fieldExists($cfg, 'catalog_url')) {
+            $DB->doQuery(
+                "ALTER TABLE `{$cfg}` MODIFY COLUMN `catalog_url` TEXT NULL DEFAULT NULL "
+                . "COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)'"
+            );
         }
         // Top up the host allowlist with the GitHub release-download hosts so the
         // 'release' policy passes the SSRF host check on already-installed boxes.
