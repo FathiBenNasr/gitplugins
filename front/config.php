@@ -99,9 +99,9 @@ $csrf   = Session::getNewCSRFToken();
     </div>
     <hr>
     <div class="mb-3">
-      <label class="form-label"><?= htmlspecialchars(__('Plugin catalog manifest URL (optional)', 'gitplugins')) ?></label>
-      <input type="url" class="form-control" name="catalog_url" value="<?= htmlspecialchars($config->getCatalogUrl()) ?>" placeholder="https://git.convergent.tn/…/catalog.json">
-      <div class="form-text"><?= htmlspecialchars(__('An https JSON manifest of installable plugins to browse on the Catalog page. Its host must be on the allow-list above. Advisory only — every install still runs the full confirm + preflight.', 'gitplugins')) ?></div>
+      <label class="form-label"><?= htmlspecialchars(__('Plugin catalog manifest URLs (optional, one per line)', 'gitplugins')) ?></label>
+      <textarea class="form-control" name="catalog_url" rows="3" placeholder="https://git.example.com/plugins/catalog.json"><?= htmlspecialchars(implode("\n", $config->getCatalogUrls())) ?></textarea>
+      <div class="form-text"><?= htmlspecialchars(__('One or more https JSON manifests of installable plugins to browse on the Catalog page — your own and/or a third party\'s. Each host must be on the allow-list above. Vendor-neutral: any organisation can point this at its own catalog and reuse this plugin. Advisory only — every install still runs the full confirm + preflight.', 'gitplugins')) ?></div>
     </div>
   </div>
   <div class="card-footer">

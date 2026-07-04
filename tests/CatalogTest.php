@@ -95,6 +95,28 @@ final class CatalogTest extends TestCase
         self::assertSame(1, count($e['known_issues']));
     }
 
+    public function testParseUrlListValidatesDedupesAndCaps(): void
+    {
+        $raw = "https://a.example/c.json\n  https://b.example/c.json \nhttp://insecure.example/x\nnot-a-url\nhttps://a.example/c.json";
+        $urls = PluginGitpluginsCatalog::parseUrlList($raw);
+        // https only, host required, de-duplicated (a.example once).
+        self::assertSame(['https://a.example/c.json', 'https://b.example/c.json'], $urls);
+    }
+
+    public function testParseUrlListEmptyAndWhitespace(): void
+    {
+        self::assertSame([], PluginGitpluginsCatalog::parseUrlList(''));
+        self::assertSame([], PluginGitpluginsCatalog::parseUrlList("\n  \n\t"));
+    }
+
+    public function testParseUrlListIsVendorNeutral(): void
+    {
+        // No host is privileged — any company's own catalog host is accepted here
+        // (the SSRF allow-list still gates the actual fetch).
+        $urls = PluginGitpluginsCatalog::parseUrlList("https://plugins.acme-corp.io/catalog.json");
+        self::assertSame(['https://plugins.acme-corp.io/catalog.json'], $urls);
+    }
+
     public function testMalformedEntriesSkippedNotFatal(): void
     {
         $json = '[

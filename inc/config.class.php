@@ -219,21 +219,25 @@ final class PluginGitpluginsConfig
     }
 
     /**
-     * The convergent catalog manifest URL (Phase 10). '' when unset. Only an
-     * https URL with a host is returned; the SSRF host-allowlist is re-checked at
-     * fetch time (defence in depth).
+     * The configured plugin-catalog manifest URLs (Phase 10). Vendor-neutral: an
+     * admin lists one or more https catalog URLs (their own and/or a third party's)
+     * — the whole browse/prefill architecture is reusable by any company. Only
+     * https URLs with a host are returned; the SSRF host-allowlist is re-checked
+     * at fetch time (defence in depth).
+     *
+     * @return string[]
      */
+    public function getCatalogUrls(): array
+    {
+        return PluginGitpluginsCatalog::parseUrlList((string) ($this->row['catalog_url'] ?? ''));
+    }
+
+    /** First configured catalog URL, or '' — back-compat convenience. */
     public function getCatalogUrl(): string
     {
-        $url = str_replace(["\r", "\n", "\0", ' '], '', trim((string) ($this->row['catalog_url'] ?? '')));
-        if ($url === '') {
-            return '';
-        }
-        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || (string) parse_url($url, PHP_URL_HOST) === '') {
-            return '';
-        }
+        $urls = $this->getCatalogUrls();
 
-        return $url;
+        return $urls[0] ?? '';
     }
 
     /**
@@ -265,12 +269,10 @@ final class PluginGitpluginsConfig
             $recipient = '';
         }
 
-        // Catalog manifest URL (Phase 10): keep only a clean https URL with a host;
-        // blank otherwise. The SSRF host-allowlist is enforced at fetch time.
-        $catalogUrl = str_replace(["\r", "\n", "\0", ' '], '', trim((string) ($post['catalog_url'] ?? '')));
-        if ($catalogUrl !== '' && (strtolower((string) parse_url($catalogUrl, PHP_URL_SCHEME)) !== 'https' || (string) parse_url($catalogUrl, PHP_URL_HOST) === '')) {
-            $catalogUrl = '';
-        }
+        // Catalog manifest URLs (Phase 10): one or more https URLs (one per line).
+        // Vendor-neutral — validated + de-duplicated; the SSRF host-allowlist is
+        // enforced at fetch time. Stored newline-joined; blank when none valid.
+        $catalogUrl = implode("\n", PluginGitpluginsCatalog::parseUrlList((string) ($post['catalog_url'] ?? '')));
 
         // Local-source roots (one absolute path per line). Only absolute,
         // NUL/CRLF-free paths are kept; anything else is dropped (fail closed).

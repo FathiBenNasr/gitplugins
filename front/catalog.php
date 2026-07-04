@@ -1,13 +1,13 @@
 <?php
 /**
- * Git Plugin Installer — convergent plugin catalog (Phase 10).
+ * Git Plugin Installer — plugin catalog (Phase 10, vendor-neutral).
  *
- * Browse the curated convergent plugin suite and one-click PRE-FILL a source row
- * (never a silent install): each "Add source" links to the normal create form
- * with prefill params, so the admin still confirms + preflights + installs
- * explicitly. A "Refresh" POST (UPDATE right + framework CSRF) re-fetches the
- * SSRF-allowlisted manifest into the cache. READ-only over glpi_plugins + our own
- * tables at render.
+ * Browse the curated plugin catalog(s) — your own and/or a third party's — and
+ * one-click PRE-FILL a source row (never a silent install): each "Add source"
+ * links to the normal create form with prefill params, so the admin still
+ * confirms + preflights + installs explicitly. A "Refresh" POST (UPDATE right +
+ * framework CSRF) re-fetches every SSRF-allowlisted manifest into the cache.
+ * READ-only over glpi_plugins + our own tables at render.
  *
  * @license GPL-2.0-or-later
  * @copyright 2026 Convergent Cloud Computing
@@ -43,7 +43,7 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/catalog.php'
 
 $entries   = PluginGitpluginsCatalog::cached();
 $canUpdate = Session::haveRight('plugin_gitplugins', UPDATE);
-$hasUrl    = PluginGitpluginsConfig::singleton()->getCatalogUrl() !== '';
+$hasUrl    = PluginGitpluginsConfig::singleton()->getCatalogUrls() !== [];
 $csrf      = Session::getNewCSRFToken();
 
 // Which catalog keys are already registered as sources (to badge "managed").
@@ -63,7 +63,7 @@ foreach ($DB->request(['SELECT' => ['plugin_key'], 'FROM' => 'glpi_plugin_gitplu
 <?php endif; ?>
   </div>
 <?php if (!$hasUrl): ?>
-  <div class="alert alert-info"><?= htmlspecialchars(__('No catalog URL configured. Set one in Configuration to browse and one-click add plugins from the convergent suite.', 'gitplugins')) ?></div>
+  <div class="alert alert-info"><?= htmlspecialchars(__('No catalog URL configured. Add one or more https manifest URLs in Configuration — your own and/or a third party\'s — to browse and one-click add plugins.', 'gitplugins')) ?></div>
 <?php elseif ($entries === []): ?>
   <div class="alert alert-warning"><?= htmlspecialchars(__('The catalog is empty. Click Refresh to fetch it from the configured manifest.', 'gitplugins')) ?></div>
 <?php else: ?>
@@ -92,6 +92,9 @@ foreach ($DB->request(['SELECT' => ['plugin_key'], 'FROM' => 'glpi_plugin_gitplu
 <?php endif; ?>
           <div class="small text-muted"><?= htmlspecialchars((string) $e['url']) ?></div>
           <div class="small text-muted"><?= htmlspecialchars(sprintf(__('Recommended policy: %s', 'gitplugins'), (string) $e['ref_policy'])) ?></div>
+<?php $csrcHost = (string) parse_url((string) ($e['catalog_source'] ?? ''), PHP_URL_HOST); if ($csrcHost !== ''): ?>
+          <div class="small text-muted"><i class="ti ti-book"></i> <?= htmlspecialchars(sprintf(__('from %s', 'gitplugins'), $csrcHost)) ?></div>
+<?php endif; ?>
         </div>
         <div class="card-footer">
 <?php if (isset($managed[$key])): ?>

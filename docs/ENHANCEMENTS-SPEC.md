@@ -407,6 +407,18 @@ by an integration test using a deliberately broken fixture plugin.
 > every install still confirmed + preflighted. Catalog/Refresh buttons on
 > status.php; catalog_url field on config.php; example manifest in
 > docs/catalog.example.json. 9 pure tests (167 total green).
+>
+> **EXTENDED (2026-07-04): vendor-neutral, multi-catalog.** The catalog URL is now
+> a first-class parameter accepting SEVERAL https manifests (one per line) — any
+> organisation points it at its own catalog(s) and reuses the whole
+> browse/prefill/known-issues architecture; nothing is bound to a convergent host.
+> `Catalog::parseUrlList()` (pure, tested) validates/dedupes the list;
+> `catalog.catalog_source` tags each cached row by origin so catalogs coexist and
+> refresh independently (rows from removed catalogs are pruned); catalog-declared
+> known issues seed under per-catalog source `catalog:<host>`. Config column
+> widened to TEXT; `getCatalogUrls()` added (`getCatalogUrl()` kept for
+> back-compat); config UI is a textarea; cards show their originating catalog.
+> De-branded copy throughout. 3 more pure tests (178 total green).
 
 - **Purpose:** biggest force-multiplier — a curated list of our
   `git.convergent.tn` plugins so an admin browses and one-click installs the whole
