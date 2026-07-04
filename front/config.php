@@ -97,6 +97,12 @@ $csrf   = Session::getNewCSRFToken();
       </select>
       <div class="form-text"><?= htmlspecialchars(__('A plugin can activate yet be misconfigured; this decides what happens when its own prerequisites/config check fails after install.', 'gitplugins')) ?></div>
     </div>
+    <hr>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Plugin catalog manifest URL (optional)', 'gitplugins')) ?></label>
+      <input type="url" class="form-control" name="catalog_url" value="<?= htmlspecialchars($config->getCatalogUrl()) ?>" placeholder="https://git.convergent.tn/…/catalog.json">
+      <div class="form-text"><?= htmlspecialchars(__('An https JSON manifest of installable plugins to browse on the Catalog page. Its host must be on the allow-list above. Advisory only — every install still runs the full confirm + preflight.', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

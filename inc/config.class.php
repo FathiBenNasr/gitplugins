@@ -219,6 +219,24 @@ final class PluginGitpluginsConfig
     }
 
     /**
+     * The convergent catalog manifest URL (Phase 10). '' when unset. Only an
+     * https URL with a host is returned; the SSRF host-allowlist is re-checked at
+     * fetch time (defence in depth).
+     */
+    public function getCatalogUrl(): string
+    {
+        $url = str_replace(["\r", "\n", "\0", ' '], '', trim((string) ($this->row['catalog_url'] ?? '')));
+        if ($url === '') {
+            return '';
+        }
+        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || (string) parse_url($url, PHP_URL_HOST) === '') {
+            return '';
+        }
+
+        return $url;
+    }
+
+    /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
      */
@@ -247,6 +265,13 @@ final class PluginGitpluginsConfig
             $recipient = '';
         }
 
+        // Catalog manifest URL (Phase 10): keep only a clean https URL with a host;
+        // blank otherwise. The SSRF host-allowlist is enforced at fetch time.
+        $catalogUrl = str_replace(["\r", "\n", "\0", ' '], '', trim((string) ($post['catalog_url'] ?? '')));
+        if ($catalogUrl !== '' && (strtolower((string) parse_url($catalogUrl, PHP_URL_SCHEME)) !== 'https' || (string) parse_url($catalogUrl, PHP_URL_HOST) === '')) {
+            $catalogUrl = '';
+        }
+
         // Local-source roots (one absolute path per line). Only absolute,
         // NUL/CRLF-free paths are kept; anything else is dropped (fail closed).
         $roots = [];
@@ -270,6 +295,7 @@ final class PluginGitpluginsConfig
             'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
             'rollback_keep'          => max(0, min(50, (int) ($post['rollback_keep'] ?? 3))),
             'health_fail_action'     => (($post['health_fail_action'] ?? 'flag') === 'rollback') ? 'rollback' : 'flag',
+            'catalog_url'            => $catalogUrl !== '' ? mb_substr($catalogUrl, 0, 255) : null,
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;

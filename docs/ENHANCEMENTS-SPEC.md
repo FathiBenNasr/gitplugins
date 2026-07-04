@@ -378,6 +378,19 @@ by an integration test using a deliberately broken fixture plugin.
 
 # Phase 10 — Convergent plugin catalog
 
+> **STATUS (2026-07-04): IMPLEMENTED.** New `glpi_plugin_gitplugins_catalog`
+> cache table + `config.catalog_url` + `Catalog` class: pure `parseManifest()`
+> (bare list or `{"plugins":[…]}`, dedupe-by-key, cap 200) and `normaliseEntry()`
+> (valid key + https URL required, ref_policy enum-constrained, key/repo aliases,
+> known_issues carried). Live `refresh()` fetches the SSRF-allowlisted manifest
+> via `fetchText`, replaces the cache, and feeds catalog-declared issues into the
+> Phase 7 registry under source 'catalog'; `cached()` reads it. UI:
+> front/catalog.php renders cards (managed badge, category, recommended policy)
+> whose "Add source" links to the existing prefill create form — advisory only,
+> every install still confirmed + preflighted. Catalog/Refresh buttons on
+> status.php; catalog_url field on config.php; example manifest in
+> docs/catalog.example.json. 9 pure tests (167 total green).
+
 - **Purpose:** biggest force-multiplier — a curated list of our
   `git.convergent.tn` plugins so an admin browses and one-click installs the whole
   suite instead of registering each source URL by hand.
