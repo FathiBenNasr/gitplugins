@@ -182,46 +182,97 @@ final class PluginGitpluginsExtractor
     }
 
     /**
-     * Move a staged plugin dir into plugins/<key> atomically: back up an existing
-     * dir to <key>.bak.<ts>, move the staged dir in, restore on failure, purge
-     * the backup on success. Live-box only; throws on failure.
+     * Move a staged plugin dir into plugins/<key> atomically and produce a
+     * NEUTRALISED backup of any prior install. Returns the backup archive path
+     * (out of the web tree, inert .zip — see PluginGitpluginsBackup) so the
+     * caller can roll back if the post-install verify fails; null on a fresh
+     * install or if the backup could not be produced. Live-box only; throws on
+     * placement failure.
+     *
+     * Flow: the old tree is moved aside to a dot-prefixed, random,
+     * NON-plugin-key holding name (atomic, same filesystem — GLPI never
+     * autoloads it), the staged tree is moved into place, then the holding tree
+     * is (1) packed into an inert out-of-web zip, (2) mined for carry-over dirs
+     * the new release lacks (vendor/, node_modules/), and (3) removed — so NO
+     * loose executable copy of old code ever lingers under plugins/.
+     *
+     * @param string[] $carryOver runtime-built dir names to preserve across update
      */
-    public static function placeAtomically(string $staged, string $pluginsBase, string $key): void
-    {
+    public static function placeAtomically(
+        string $staged,
+        string $pluginsBase,
+        string $key,
+        string $backupLabel = '',
+        array $carryOver = ['vendor', 'node_modules']
+    ): ?string {
         // Key must be a plain plugin dir name — never a path.
         if ($key === '' || !preg_match('/^[a-z0-9_]+$/', $key)) {
             throw new \RuntimeException('place_failed');
         }
-        $target = rtrim($pluginsBase, '/') . '/' . $key;
-        $backup = null;
+        $base    = rtrim($pluginsBase, '/');
+        $target  = $base . '/' . $key;
+        $holding = null;
 
         if (is_dir($target)) {
-            $backup = $target . '.bak.' . date('YmdHis');
-            if (!@rename($target, $backup)) {
+            $holding = $base . '/.gitplugins_swap_' . bin2hex(random_bytes(8));
+            if (!@rename($target, $holding)) {
                 throw new \RuntimeException('place_failed');
             }
         }
 
         if (!@rename($staged, $target)) {
-            // Restore the backup before bailing out.
-            if ($backup !== null) {
-                @rename($backup, $target);
+            // Restore the prior tree before bailing out.
+            if ($holding !== null) {
+                @rename($holding, $target);
             }
             throw new \RuntimeException('place_failed');
         }
 
         // Match GLPI's web-user ownership (no root-owned files — lesson #16).
-        if (function_exists('posix_getpwnam')) {
-            $pw = @posix_getpwnam('apache');
-            if (is_array($pw)) {
-                @chown($target, (int) $pw['uid']);
-                @chgrp($target, (int) $pw['gid']);
+        PluginGitpluginsBackup::chownWeb($target);
+
+        if ($holding === null) {
+            return null; // fresh install — nothing to back up
+        }
+
+        // 1) Neutralise the old tree into an inert, out-of-web zip FIRST (while it
+        //    is still complete, so a rollback restores everything incl. vendor/).
+        $backupZip = PluginGitpluginsBackup::zipDir($holding, $key, $backupLabel);
+
+        // 2) Carry over runtime-built dirs the new release does not ship (so an
+        //    optional one-click build — e.g. assetreport's mPDF vendor/ — is not
+        //    wiped by an update).
+        $carry = PluginGitpluginsBackup::carryOverList(
+            $carryOver,
+            self::topEntries($holding),
+            self::topEntries($target)
+        );
+        foreach ($carry as $dir) {
+            $from = $holding . '/' . $dir;
+            $to   = $target . '/' . $dir;
+            if (is_dir($from) && !file_exists($to)) {
+                @rename($from, $to);
             }
         }
 
-        if ($backup !== null) {
-            self::rrmdir($backup); // success → drop the backup
+        // 3) Remove the loose old tree — only the neutralised zip remains.
+        self::rrmdir($holding);
+
+        return $backupZip; // null if zipping failed (rollback then unavailable)
+    }
+
+    /** Top-level entry names (dirs + files) of a directory. */
+    public static function topEntries(string $dir): array
+    {
+        $out = [];
+        foreach (@scandir($dir) ?: [] as $e) {
+            if ($e === '.' || $e === '..') {
+                continue;
+            }
+            $out[] = $e;
         }
+
+        return $out;
     }
 
     /** Recursive rmdir (best-effort cleanup of temp/backup dirs). */

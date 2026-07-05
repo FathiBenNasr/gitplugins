@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated known-issue registry shipped with gitplugins (Phase 7). Seeded into glpi_plugin_gitplugins_known_issues on install under source 'builtin'; refreshable from the convergent catalog (Phase 10). kind ∈ conflict|advisory|min_peer. version_range/peer_range use whitespace-AND comparators (>=,<=,>,<,=,!=) or 'A - B' hyphen ranges; empty = any.",
+  "issues": [
+    {
+      "plugin_key": "geninventorynumber",
+      "version_range": "",
+      "kind": "advisory",
+      "peer_key": "",
+      "peer_range": "",
+      "message": "geninventorynumber hooks pre_item_update on assets and can revert fields (e.g. otherserial) written by native GLPI inventory, 500-ing NetInventory. Verify precedence before enabling alongside native inventory.",
+      "source": "builtin"
+    },
+    {
+      "plugin_key": "geninventorynumber",
+      "version_range": "",
+      "kind": "conflict",
+      "peer_key": "glpiinventory",
+      "peer_range": "",
+      "message": "geninventorynumber and glpiinventory both mutate asset fields on update; running them together has caused inventory import failures. Pin field ownership or disable one.",
+      "source": "builtin"
+    }
+  ]
+}

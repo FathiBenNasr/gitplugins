@@ -121,6 +121,126 @@ final class PluginGitpluginsConfig
     }
 
     /**
+     * Runtime-built dirs preserved from the old tree across an update (so an
+     * optional one-click build — e.g. assetreport's mPDF vendor/ — is not wiped).
+     * Defaults to vendor + node_modules. Only plain, safe dir names are honoured.
+     *
+     * @return string[]
+     */
+    public function getCarryOverDirs(): array
+    {
+        $raw = $this->row['carry_over_dirs'] ?? null;
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+        if (!is_array($raw)) {
+            return ['vendor', 'node_modules'];
+        }
+        $out = [];
+        foreach ($raw as $d) {
+            $d = trim((string) $d);
+            if ($d !== '' && preg_match('/^[A-Za-z0-9._-]+$/', $d)) {
+                $out[$d] = $d;
+            }
+        }
+
+        return $out === [] ? ['vendor', 'node_modules'] : array_values($out);
+    }
+
+    /** Whether to clear GLPI caches after activate (default on). */
+    public function autoCacheClear(): bool
+    {
+        return (bool) ($this->row['auto_cache_clear'] ?? true);
+    }
+
+    /** Per-build wall-clock cap for composer/npm build steps (clamped 30..1800). */
+    public function getBuildTimeoutSeconds(): int
+    {
+        return max(30, min(1800, (int) ($this->row['build_timeout_seconds'] ?? 300)));
+    }
+
+    /**
+     * Size cap (MB) for a pre-migration DB snapshot; over this we skip + warn
+     * rather than block the update. 0 = unlimited. Clamped 0..10000.
+     */
+    public function getSnapshotMaxMb(): int
+    {
+        return max(0, min(10000, (int) ($this->row['snapshot_max_mb'] ?? 100)));
+    }
+
+    /**
+     * Whether LOCAL/dev sources are permitted at all (Phase 1). OFF by default —
+     * local sources read the server filesystem, so they must be explicitly
+     * enabled and are unsafe on multi-tenant/hosted installs.
+     */
+    public function allowLocalSources(): bool
+    {
+        return (bool) ($this->row['allow_local_sources'] ?? false);
+    }
+
+    /**
+     * Absolute-path root allowlist a local source may live under. Only absolute,
+     * NUL/CRLF-free paths are honoured; empty = nothing allowed (fail closed).
+     *
+     * @return string[]
+     */
+    public function getLocalSourceRoots(): array
+    {
+        $raw = $this->row['local_source_roots'] ?? null;
+        if (is_string($raw)) {
+            $raw = json_decode($raw, true);
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $p) {
+            $p = str_replace(["\r", "\n", "\0"], '', trim((string) $p));
+            if ($p !== '' && $p[0] === '/') {
+                $out[$p] = $p;
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /** How many pre-update snapshots to retain per plugin for rollback (0..50). */
+    public function getRollbackKeep(): int
+    {
+        return max(0, min(50, (int) ($this->row['rollback_keep'] ?? 3)));
+    }
+
+    /** Action on a FAILED post-install health check: 'flag' (default) or 'rollback'. */
+    public function healthFailAction(): string
+    {
+        $v = strtolower(trim((string) ($this->row['health_fail_action'] ?? 'flag')));
+
+        return $v === 'rollback' ? 'rollback' : 'flag';
+    }
+
+    /**
+     * The configured plugin-catalog manifest URLs (Phase 10). Vendor-neutral: an
+     * admin lists one or more https catalog URLs (their own and/or a third party's)
+     * — the whole browse/prefill architecture is reusable by any company. Only
+     * https URLs with a host are returned; the SSRF host-allowlist is re-checked
+     * at fetch time (defence in depth).
+     *
+     * @return string[]
+     */
+    public function getCatalogUrls(): array
+    {
+        return PluginGitpluginsCatalog::parseUrlList((string) ($this->row['catalog_url'] ?? ''));
+    }
+
+    /** First configured catalog URL, or '' — back-compat convenience. */
+    public function getCatalogUrl(): string
+    {
+        $urls = $this->getCatalogUrls();
+
+        return $urls[0] ?? '';
+    }
+
+    /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
      */
@@ -149,6 +269,21 @@ final class PluginGitpluginsConfig
             $recipient = '';
         }
 
+        // Catalog manifest URLs (Phase 10): one or more https URLs (one per line).
+        // Vendor-neutral — validated + de-duplicated; the SSRF host-allowlist is
+        // enforced at fetch time. Stored newline-joined; blank when none valid.
+        $catalogUrl = implode("\n", PluginGitpluginsCatalog::parseUrlList((string) ($post['catalog_url'] ?? '')));
+
+        // Local-source roots (one absolute path per line). Only absolute,
+        // NUL/CRLF-free paths are kept; anything else is dropped (fail closed).
+        $roots = [];
+        foreach (preg_split('/[\r\n]+/', (string) ($post['local_source_roots'] ?? '')) ?: [] as $p) {
+            $p = str_replace("\0", '', trim($p));
+            if ($p !== '' && $p[0] === '/') {
+                $roots[$p] = mb_substr($p, 0, 255);
+            }
+        }
+
         $data = [
             'allowed_hosts'          => json_encode(array_values($hosts)),
             'allow_auto_install'     => isset($post['allow_auto_install']) ? 1 : 0,
@@ -158,6 +293,11 @@ final class PluginGitpluginsConfig
             'check_frequency_minutes' => max(5, min(40320, (int) ($post['check_frequency_minutes'] ?? 1440))),
             'notify_updates'         => isset($post['notify_updates']) ? 1 : 0,
             'notify_recipient'       => $recipient !== '' ? mb_substr($recipient, 0, 255) : null,
+            'allow_local_sources'    => isset($post['allow_local_sources']) ? 1 : 0,
+            'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
+            'rollback_keep'          => max(0, min(50, (int) ($post['rollback_keep'] ?? 3))),
+            'health_fail_action'     => (($post['health_fail_action'] ?? 'flag') === 'rollback') ? 'rollback' : 'flag',
+            'catalog_url'            => $catalogUrl !== '' ? mb_substr($catalogUrl, 0, 255) : null,
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;

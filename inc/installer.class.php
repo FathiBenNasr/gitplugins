@@ -88,13 +88,31 @@ final class PluginGitpluginsInstaller
             return false;
         }
 
-        $token  = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
-        $policy = (string) ($source['ref_policy'] ?? 'latest_tag');
+        $token    = PluginGitpluginsSource::decryptCredential($source['credential'] ?? null);
+        $policy   = (string) ($source['ref_policy'] ?? 'latest_tag');
+        $provider = (string) ($source['provider'] ?? 'unknown');
+        $isLocal  = $provider === 'local';
 
-        // Resolve the archive URL. For the `release` policy we resolve a pre-built
-        // release asset (.tgz) via the releases API (network, SSRF-guarded); for
-        // every other policy we build the git source-tarball URL (pure).
-        if ($policy === 'release') {
+        // LOCAL source (Phase 1): no fetch — the archive URL is irrelevant. Gate
+        // hard (feature flag OFF by default + path allowlist); the actual acquire
+        // (copy into the staged dir) happens inside the try below.
+        if ($isLocal) {
+            if (!$cfg->allowLocalSources()) {
+                self::fail($sourceId, $key, 'local_sources_disabled');
+
+                return false;
+            }
+            if (!PluginGitpluginsLocalsource::pathAllowed((string) ($source['url'] ?? ''), $cfg->getLocalSourceRoots())) {
+                self::fail($sourceId, $key, 'local_path_not_allowed');
+
+                return false;
+            }
+            $archiveUrl = '';
+        } elseif ($policy === 'release') {
+            // Resolve the archive URL. For the `release` policy we resolve a
+            // pre-built release asset (.tgz) via the releases API (network,
+            // SSRF-guarded); for every other policy we build the git source-
+            // tarball URL (pure).
             try {
                 [$archiveUrl] = PluginGitpluginsFetcher::resolveReleaseAsset(
                     (string) ($source['provider'] ?? 'unknown'),
@@ -122,21 +140,158 @@ final class PluginGitpluginsInstaller
         $archive = null;
         $staged  = null;
         try {
-            $archive = PluginGitpluginsFetcher::fetch(
-                $archiveUrl,
-                $cfg->getAllowedHosts(),
-                $token,
-                $cfg->getMaxDownloadBytes(),
-                $cfg->getFetchTimeoutSeconds()
-            );
+            // Acquire the staged tree. LOCAL: copy the (allowlisted) path in, no
+            // network. Otherwise: SSRF-guarded fetch → sanitised extract.
+            if ($isLocal) {
+                $priorVersion = self::installedVersion($key);
+                $staged = PluginGitpluginsLocalsource::copyToStaged(
+                    (string) ($source['url'] ?? ''),
+                    $key,
+                    $cfg->getLocalSourceRoots()
+                );
+            } else {
+                $archive = PluginGitpluginsFetcher::fetch(
+                    $archiveUrl,
+                    $cfg->getAllowedHosts(),
+                    $token,
+                    $cfg->getMaxDownloadBytes(),
+                    $cfg->getFetchTimeoutSeconds()
+                );
 
-            $staged      = PluginGitpluginsExtractor::extractTo($archive, $key);
+                // Capture the outgoing version to label the neutralised backup.
+                $priorVersion = self::installedVersion($key);
+
+                $staged = PluginGitpluginsExtractor::extractTo($archive, $key);
+            }
             $pluginsBase = self::pluginsDir();
-            PluginGitpluginsExtractor::placeAtomically($staged, $pluginsBase, $key);
+
+            // R6 preflight gate: refuse to place a plugin this box can't run
+            // (GLPI/PHP version out of range, or a required PHP extension
+            // missing) — otherwise it half-installs, deactivates and 404s. Runs
+            // on the STAGED tree, before anything touches plugins/.
+            $preflight = self::preflight($staged, $key);
+            if (!$preflight['ok']) {
+                PluginGitpluginsLog::record($sourceId, 'install', 'error', 'preflight_blocked: ' . implode('; ', $preflight['blockers']), $resolvedRef, $resolvedSha);
+                throw new \RuntimeException('preflight_blocked');
+            }
+
+            // R5 build (opt-in per source): a source tarball ships no vendor/ —
+            // build it in the staged dir before it goes live. Third-party build
+            // code, so OFF unless the source explicitly enabled it.
+            $buildOptIn = (bool) ($source['build_on_install'] ?? false);
+            if ($buildOptIn) {
+                PluginGitpluginsBuilder::run($staged, true, $cfg->getBuildTimeoutSeconds());
+            }
+
+            // R7 locale compile: compile any shipped-only .po so translations
+            // don't silently fall back to English. Best-effort.
+            $compiled = PluginGitpluginsLocales::compile($staged);
+            if ($compiled > 0) {
+                PluginGitpluginsLog::record($sourceId, 'install', 'ok', "compiled {$compiled} locale(s)", $resolvedRef, $resolvedSha);
+            }
+
+            // placeAtomically returns the path of an inert, out-of-web backup zip
+            // of the prior install (null on a fresh install / if zipping failed).
+            $backupZip = PluginGitpluginsExtractor::placeAtomically(
+                $staged,
+                $pluginsBase,
+                $key,
+                $priorVersion,
+                $cfg->getCarryOverDirs()
+            );
             $staged = null; // moved into place; nothing left to clean
+
+            // R8 DB snapshot: R2 restores FILES; a failed migration can still
+            // leave the schema ahead of the restored code. Gzip-dump the
+            // plugin's OWN tables (scoped, bounded) so a rollback restores schema
+            // too. Best-effort — a skipped/over-cap dump never blocks the update.
+            $dbSnapshot = ($priorVersion !== '')
+                ? PluginGitpluginsSnapshot::dumpOwnedTables($key, $cfg->getSnapshotMaxMb())
+                : null;
 
             // Drive GLPI core's public install/activate seam (marketplace-equiv).
             self::nativeInstall($key);
+
+            // Post-install verify + self-heal (R3): a code/DB version mismatch
+            // silently deactivates the plugin and 404s every page. If it is not
+            // active+versioned after one idempotent repair, roll back to the
+            // neutralised backup and fail — never leave a broken/half tree live.
+            if (!self::verifyInstalled($key)) {
+                if (is_string($backupZip)
+                    && PluginGitpluginsBackup::restore($backupZip, $pluginsBase, $key)) {
+                    // Restore the schema too (R8) BEFORE re-registering, so the
+                    // restored code meets the version of the DB it expects.
+                    if (is_string($dbSnapshot)) {
+                        PluginGitpluginsSnapshot::restore($dbSnapshot);
+                    }
+                    self::nativeInstall($key); // re-register the restored version
+                    @unlink($backupZip);
+                }
+                if (is_string($dbSnapshot)) {
+                    @unlink($dbSnapshot);
+                }
+                throw new \RuntimeException('verify_failed');
+            }
+
+            // Post-install HEALTH gate (P5): "activated" is not "working". Ask the
+            // target's own check_prerequisites()/check_config() hooks. On a hard
+            // FAIL, policy decides: 'rollback' reverts to the prior version (files
+            // + schema) and fails the run; 'flag' (default) keeps it active but
+            // records the red verdict for the admin.
+            $healthResult = PluginGitpluginsHealth::evaluate($key);
+            if ($healthResult['health'] === 'fail'
+                && $cfg->healthFailAction() === 'rollback'
+                && is_string($backupZip)
+                && PluginGitpluginsBackup::restore($backupZip, $pluginsBase, $key)) {
+                if (is_string($dbSnapshot)) {
+                    PluginGitpluginsSnapshot::restore($dbSnapshot);
+                }
+                self::nativeInstall($key);
+                @unlink($backupZip);
+                if (is_string($dbSnapshot)) {
+                    @unlink($dbSnapshot);
+                }
+                PluginGitpluginsLog::record($sourceId, 'install', 'error', 'health_failed (rolled back): ' . $healthResult['detail'], $resolvedRef, $resolvedSha);
+                throw new \RuntimeException('health_failed');
+            }
+
+            // Verified healthy → retain the pre-update file backup + DB dump as a
+            // rollback snapshot (P2), keeping the newest N per plugin. If retention
+            // is disabled (keep=0) or there was no backup (fresh install), drop the
+            // files so they do not accumulate.
+            $keep = $cfg->getRollbackKeep();
+            $retained = 0;
+            if (is_string($backupZip)) {
+                $retained = PluginGitpluginsRollback::record(
+                    $key,
+                    $sourceId,
+                    $priorVersion,        // the version being replaced (rollback target label)
+                    '',                    // prior SHA not tracked separately; version is the label
+                    $backupZip,
+                    is_string($dbSnapshot) ? $dbSnapshot : null,
+                    $keep
+                );
+            }
+            if ($retained === 0) {
+                if (is_string($backupZip)) {
+                    @unlink($backupZip);
+                }
+                if (is_string($dbSnapshot)) {
+                    @unlink($dbSnapshot);
+                }
+            }
+
+            // Hook-collision detection (P6): read-only introspection of the live
+            // $PLUGIN_HOOKS map — does the just-activated plugin hook the same
+            // item hook + itemtype as another active plugin (the geninventorynumber
+            // class of bug)? Cache the collisions for the status badge; never fails
+            // the install. NOTE: the plugin's hooks are registered at init on a
+            // subsequent request, so this may be empty on the very tick that
+            // installs it — the next cron check re-populates it.
+            $hookCollisions = PluginGitpluginsHookcheck::evaluate($key);
+            if ($hookCollisions !== []) {
+                PluginGitpluginsLog::record($sourceId, 'install', 'ok', 'hook overlaps: ' . implode(' | ', PluginGitpluginsHookcheck::format($key, $hookCollisions)), $resolvedRef, $resolvedSha);
+            }
 
             // FIX 1: a successful install/update clears pending_action back to
             // 'none', stores the new installed sha/version, and clears the
@@ -156,9 +311,12 @@ final class PluginGitpluginsInstaller
                 'last_result'                  => 'ok',
                 'last_error'                   => null,
                 'last_install_at'              => date('Y-m-d H:i:s'),
+                'health'                       => $healthResult['health'],
+                'health_detail'                => $healthResult['detail'] !== '' ? $healthResult['detail'] : null,
+                'hook_warnings'                => $hookCollisions !== [] ? json_encode($hookCollisions) : null,
             ], ['plugin_key' => $key]);
 
-            PluginGitpluginsLog::record($sourceId, 'install', 'ok', 'installed ' . $key, $resolvedRef, $resolvedSha);
+            PluginGitpluginsLog::record($sourceId, 'install', $healthResult['health'] === 'fail' ? 'error' : 'ok', 'installed ' . $key . ' (health: ' . $healthResult['health'] . ')', $resolvedRef, $resolvedSha);
 
             return true;
         } catch (\Throwable $e) {
@@ -176,6 +334,25 @@ final class PluginGitpluginsInstaller
         }
     }
 
+    /**
+     * Re-register + verify a plugin whose files/tables were just restored from a
+     * rollback snapshot (P2). Public seam for PluginGitpluginsRollback. Returns
+     * true only when the restored version is active+versioned.
+     */
+    public static function reinstallActive(string $key): bool
+    {
+        if (!preg_match('/^[a-z0-9_]+$/', $key)) {
+            return false;
+        }
+        try {
+            self::nativeInstall($key);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return self::verifyInstalled($key);
+    }
+
     /** Drive the native, source-agnostic install + activate machinery. */
     private static function nativeInstall(string $key): void
     {
@@ -189,6 +366,96 @@ final class PluginGitpluginsInstaller
         // install() runs the target plugin's own install hook (like marketplace).
         $plugin->install($id);
         $plugin->activate($id);
+        // R4: stale plugin route/asset cache is our most common post-update 404
+        // cause (the README's manual cache-clear step). Best effort — a backend
+        // without a working clear() must never fail the install.
+        self::clearCaches();
+    }
+
+    /**
+     * R6 gate: read the staged plugin.xml (best-effort), merge declared + known
+     * requirements, and check them against this box. Returns the Preflight
+     * verdict; a missing/unparseable manifest yields ok=true with only the
+     * built-in extension heuristic applied (never blocks on absence of data).
+     *
+     * @return array{ok:bool,blockers:string[],warnings:string[]}
+     */
+    private static function preflight(string $staged, string $key): array
+    {
+        $info = [];
+        $xmlPath = $staged . '/plugin.xml';
+        if (is_file($xmlPath)) {
+            $xml = @file_get_contents($xmlPath);
+            if (is_string($xml)) {
+                $parsed = PluginGitpluginsManifest::parseInfo($xml);
+                if (is_array($parsed)) {
+                    $info = $parsed;
+                }
+            }
+        }
+        $req = PluginGitpluginsPreflight::requirementsFor($info, $key);
+
+        return PluginGitpluginsPreflight::checkEnvironment($req);
+    }
+
+    /** Best-effort GLPI cache invalidation after activate (gated by config). */
+    private static function clearCaches(): void
+    {
+        if (!PluginGitpluginsConfig::singleton()->autoCacheClear()) {
+            return;
+        }
+        try {
+            /** @var mixed $GLPI_CACHE */
+            global $GLPI_CACHE;
+            if (is_object($GLPI_CACHE) && method_exists($GLPI_CACHE, 'clear')) {
+                $GLPI_CACHE->clear();
+            }
+        } catch (\Throwable $e) {
+            // ignore — cache clear is best effort.
+        }
+    }
+
+    /**
+     * PURE: is a post-install plugin state healthy — ACTIVE and carrying a
+     * version? Extracted for unit testing (the FS/DB read lives in
+     * verifyInstalled). $activated is Plugin::ACTIVATED, passed in so the test
+     * needs no GLPI bootstrap.
+     */
+    public static function isHealthyState(int $state, string $version, int $activated): bool
+    {
+        return $state === $activated && trim($version) !== '';
+    }
+
+    /**
+     * Confirm the plugin is registered, ACTIVE and versioned after install,
+     * retrying one idempotent install()+activate() before giving up (a version
+     * bump can leave it flagged TOBECONFIGURED/TOBEUPDATED). Returns false if
+     * still unhealthy — the caller then rolls back to the neutralised backup.
+     */
+    public static function verifyInstalled(string $key): bool
+    {
+        $activated = defined('Plugin::ACTIVATED') ? Plugin::ACTIVATED : 1;
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $plugin = new Plugin();
+            if (!$plugin->getFromDBbyDir($key)) {
+                return false;
+            }
+            $state   = (int) ($plugin->fields['state'] ?? 0);
+            $version = (string) ($plugin->fields['version'] ?? '');
+            if (self::isHealthyState($state, $version, (int) $activated)) {
+                return true;
+            }
+            // One idempotent repair attempt before rolling back.
+            $id = (int) $plugin->fields['id'];
+            try {
+                $plugin->install($id);
+                $plugin->activate($id);
+            } catch (\Throwable $e) {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private static function fail(int $sourceId, string $key, string $reason): void
