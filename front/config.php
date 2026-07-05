@@ -74,6 +74,35 @@ $csrf   = Session::getNewCSRFToken();
       <input type="email" class="form-control" name="notify_recipient" value="<?= htmlspecialchars($config->getNotifyRecipient()) ?>" placeholder="<?= htmlspecialchars(__('Defaults to Super-Admin users / GLPI admin email', 'gitplugins')) ?>">
       <div class="form-text"><?= htmlspecialchars(__('Leave blank to email all active Super-Admin users (or the GLPI admin email).', 'gitplugins')) ?></div>
     </div>
+    <hr>
+    <div class="form-check form-switch mb-2">
+      <input class="form-check-input" type="checkbox" name="allow_local_sources" id="als"<?= $config->allowLocalSources() ? ' checked' : '' ?>>
+      <label class="form-check-label" for="als"><?= htmlspecialchars(__('Allow LOCAL/dev filesystem sources — reads the server filesystem; keep OFF on hosted/multi-tenant installs', 'gitplugins')) ?></label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Local source roots (one absolute path per line)', 'gitplugins')) ?></label>
+      <textarea class="form-control" name="local_source_roots" rows="3" placeholder="/srv/glpi-plugins"><?= htmlspecialchars(implode("\n", $config->getLocalSourceRoots())) ?></textarea>
+      <div class="form-text"><?= htmlspecialchars(__('A local source path must sit at or under one of these roots. Empty = local sources cannot resolve any path.', 'gitplugins')) ?></div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Rollback snapshots to keep (per plugin)', 'gitplugins')) ?></label>
+      <input type="number" class="form-control" name="rollback_keep" min="0" max="50" value="<?= (int) $config->getRollbackKeep() ?>">
+      <div class="form-text"><?= htmlspecialchars(__('Each update retains a pre-update file+DB snapshot for one-click rollback. 0 keeps none.', 'gitplugins')) ?></div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('On failed post-install health check', 'gitplugins')) ?></label>
+      <select class="form-select" name="health_fail_action">
+        <option value="flag"<?= $config->healthFailAction() === 'flag' ? ' selected' : '' ?>><?= htmlspecialchars(__('Flag red but keep the plugin active (admin decides)', 'gitplugins')) ?></option>
+        <option value="rollback"<?= $config->healthFailAction() === 'rollback' ? ' selected' : '' ?>><?= htmlspecialchars(__('Automatically roll back to the previous version', 'gitplugins')) ?></option>
+      </select>
+      <div class="form-text"><?= htmlspecialchars(__('A plugin can activate yet be misconfigured; this decides what happens when its own prerequisites/config check fails after install.', 'gitplugins')) ?></div>
+    </div>
+    <hr>
+    <div class="mb-3">
+      <label class="form-label"><?= htmlspecialchars(__('Plugin catalog manifest URLs (optional, one per line)', 'gitplugins')) ?></label>
+      <textarea class="form-control" name="catalog_url" rows="3" placeholder="https://git.example.com/plugins/catalog.json"><?= htmlspecialchars(implode("\n", $config->getCatalogUrls())) ?></textarea>
+      <div class="form-text"><?= htmlspecialchars(__('One or more https JSON manifests of installable plugins to browse on the Catalog page — your own and/or a third party\'s. Each host must be on the allow-list above. Vendor-neutral: any organisation can point this at its own catalog and reuse this plugin. Advisory only — every install still runs the full confirm + preflight.', 'gitplugins')) ?></div>
+    </div>
   </div>
   <div class="card-footer">
     <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>

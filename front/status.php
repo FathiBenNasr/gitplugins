@@ -32,6 +32,10 @@ $installs = [];
 foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_installs']) as $i) {
     $installs[(string) $i['plugin_key']] = $i;
 }
+// Phase 7: load the known-issues registry + the active-peer set ONCE (not per
+// row) so the per-plugin advisory badge below is a pure in-memory evaluation.
+$knownIssues = PluginGitpluginsKnownissues::load();
+$activePeers = PluginGitpluginsKnownissues::installedPeers();
 $updateCount = 0;
 foreach ($sources as $s) {
     $i = $installs[(string) $s['plugin_key']] ?? [];
@@ -41,7 +45,14 @@ foreach ($sources as $s) {
 }
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-11">
-  <h2 class="mt-3 mb-2"><?= htmlspecialchars(__('Managed plugin status', 'gitplugins')) ?></h2>
+  <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+    <h2 class="mb-0"><?= htmlspecialchars(__('Managed plugin status', 'gitplugins')) ?></h2>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/catalog.php') ?>"><i class="ti ti-apps"></i> <?= htmlspecialchars(__('Catalog', 'gitplugins')) ?></a>
+      <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/targets.php') ?>"><i class="ti ti-server"></i> <?= htmlspecialchars(__('Targets', 'gitplugins')) ?></a>
+      <a class="btn btn-outline-primary" href="<?= htmlspecialchars($root . '/front/plan.php') ?>"><i class="ti ti-list-check"></i> <?= htmlspecialchars(__('Bulk update (dry-run)', 'gitplugins')) ?></a>
+    </div>
+  </div>
 <?php if ($updateCount > 0): ?>
   <div class="alert alert-info"><i class="ti ti-cloud-download"></i>
     <?= htmlspecialchars(sprintf(_n('%d managed plugin has an update available.', '%d managed plugins have updates available.', $updateCount, 'gitplugins'), $updateCount)) ?>
@@ -55,6 +66,7 @@ foreach ($sources as $s) {
       <th><?= htmlspecialchars(__('Pending', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Last check', 'gitplugins')) ?></th>
       <th><?= htmlspecialchars(__('Last result', 'gitplugins')) ?></th>
+      <th><?= htmlspecialchars(__('Health', 'gitplugins')) ?></th>
       <th></th>
     </tr></thead>
     <tbody>
@@ -66,11 +78,48 @@ foreach ($sources as $s) {
         <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
         <td><?= htmlspecialchars((string) ($i['last_check_at'] ?? '')) ?></td>
         <td><?= htmlspecialchars((string) ($i['last_result'] ?? 'none')) ?><?= !empty($i['last_error']) ? ' <span class="text-danger" title="' . htmlspecialchars((string) $i['last_error']) . '">!</span>' : '' ?></td>
-        <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a></td>
+<?php
+        $health = (string) ($i['health'] ?? 'unknown');
+        $hbadge = ['ok' => 'bg-success', 'warn' => 'bg-warning', 'fail' => 'bg-danger', 'unknown' => 'bg-secondary'][$health] ?? 'bg-secondary';
+?>
+        <td><?php if (($i['health'] ?? '') !== ''): ?><span class="badge <?= $hbadge ?>"<?= !empty($i['health_detail']) ? ' title="' . htmlspecialchars((string) $i['health_detail']) . '"' : '' ?>><?= htmlspecialchars($health) ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?>
+<?php
+        // Phase 6: cached hook-collision warnings → an amber badge with the
+        // collision list in its tooltip (read-only; the install never blocks on it).
+        $hooks = json_decode((string) ($i['hook_warnings'] ?? ''), true);
+        if (is_array($hooks) && $hooks !== []):
+            $htitle = implode("\n", PluginGitpluginsHookcheck::format((string) $s['plugin_key'], $hooks));
+?>
+          <span class="badge bg-warning ms-1" title="<?= htmlspecialchars($htitle) ?>"><i class="ti ti-alert-triangle"></i> <?= htmlspecialchars(sprintf(_n('%d hook conflict', '%d hook conflicts', count($hooks), 'gitplugins'), count($hooks))) ?></span>
+<?php endif; ?>
+<?php
+        // Phase 7: known-issue advisories for this plugin at its installed version
+        // against the active peer set → a red badge listing them in the tooltip.
+        $ki = PluginGitpluginsKnownissues::evaluate($knownIssues, (string) $s['plugin_key'], (string) ($i['installed_version'] ?? ''), $activePeers);
+        if ($ki !== []):
+            $kititle = implode("\n", array_map(static fn (array $r): string => ($r['kind'] === 'advisory' ? '' : $r['kind'] . ' (' . $r['peer_key'] . '): ') . $r['message'], $ki));
+?>
+          <span class="badge bg-danger ms-1" title="<?= htmlspecialchars($kititle) ?>"><i class="ti ti-alert-octagon"></i> <?= htmlspecialchars(sprintf(_n('%d known issue', '%d known issues', count($ki), 'gitplugins'), count($ki))) ?></span>
+<?php endif; ?>
+        </td>
+        <td class="text-end">
+          <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a>
+<?php $snaps = PluginGitpluginsRollback::rowsFor((string) $s['plugin_key']); if ($snaps): ?>
+          <form method="post" action="<?= htmlspecialchars($root . '/front/rollback.php') ?>" class="d-inline-flex gap-1 align-items-center ms-1" onsubmit="return confirm('<?= htmlspecialchars(__('Roll back this plugin to the selected snapshot? Live plugin code and its tables are replaced.', 'gitplugins')) ?>');">
+            <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars(Session::getNewCSRFToken()) ?>">
+            <select name="snapshot_id" class="form-select form-select-sm" style="width:auto">
+<?php foreach ($snaps as $snap): ?>
+              <option value="<?= (int) $snap['id'] ?>"><?= htmlspecialchars((string) ($snap['version'] ?? '?')) ?> · <?= htmlspecialchars((string) ($snap['date_creation'] ?? '')) ?></option>
+<?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-warning"><i class="ti ti-arrow-back-up"></i> <?= htmlspecialchars(__('Rollback', 'gitplugins')) ?></button>
+          </form>
+<?php endif; ?>
+        </td>
       </tr>
 <?php endforeach; ?>
 <?php if (!$any): ?>
-      <tr><td colspan="7" class="text-center text-muted"><?= htmlspecialchars(__('No managed sources yet.', 'gitplugins')) ?></td></tr>
+      <tr><td colspan="8" class="text-center text-muted"><?= htmlspecialchars(__('No managed sources yet.', 'gitplugins')) ?></td></tr>
 <?php endif; ?>
     </tbody>
   </table>

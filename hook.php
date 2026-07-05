@@ -28,7 +28,7 @@ function plugin_gitplugins_install(): bool
                 `name`            VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Admin label for the managed repository',
                 `url`             VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Normalised git/HTTPS repository URL (CR/LF-stripped, no trailing slash)',
                 `host`            VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Lower-cased host parsed from the URL, checked against the SSRF allowlist',
-                `provider`        ENUM('github','gitlab','gitea','forgejo','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Detected forge provider, drives the API/ref-resolution strategy',
+                `provider`        ENUM('github','gitlab','gitea','forgejo','local','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Detected forge provider (or local filesystem source), drives the acquire/ref-resolution strategy',
                 `plugin_key`      VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'GLPI plugin key this source provides (matches the plugin directory/setup key)',
                 `ref_policy`      ENUM('track_branch','latest_tag','pin_tag','pin_sha','release') NOT NULL DEFAULT 'latest_tag' COMMENT 'How the target ref is resolved: track_branch|latest_tag|pin_tag|pin_sha|release',
                 `ref`             VARCHAR(255) NULL DEFAULT NULL COMMENT 'Concrete ref for the policy (branch/tag name or SHA); NULL when auto-resolved',
@@ -36,6 +36,7 @@ function plugin_gitplugins_install(): bool
                 `entities_id`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Owning GLPI entity (A01 scope)',
                 `is_recursive`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether the entity scope includes sub-entities',
                 `is_active`       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Disabled sources are skipped by the update checker',
+                `build_on_install` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT 'Opt-in: run composer/npm build in the staged tree before install (runs third-party build code; OFF by default)',
                 `date_creation`   DATETIME     NULL DEFAULT NULL COMMENT 'Row creation timestamp',
                 `date_mod`        DATETIME     NULL DEFAULT NULL COMMENT 'Last modification timestamp',
                 PRIMARY KEY (`id`),
@@ -65,6 +66,9 @@ function plugin_gitplugins_install(): bool
                 `last_install_at`     DATETIME     NULL DEFAULT NULL COMMENT 'When an install/update last succeeded',
                 `last_notified_sha`   VARCHAR(64)  NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)',
                 `last_notified_at`    DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest',
+                `health`              ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation',
+                `health_detail`       VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)',
+                `hook_warnings`       JSON         NULL DEFAULT NULL COMMENT 'Cached JSON list of post-install $PLUGIN_HOOKS collisions with other active plugins (Phase 6 badge)',
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `uniq_plugin_key` (`plugin_key`),
                 KEY `idx_source`     (`plugin_gitplugins_sources_id`),
@@ -94,6 +98,84 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- snapshots: retained pre-update file backup + DB dump for rollback ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_snapshots')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_snapshots` (
+                `id`                INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`        VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Managed plugin key this snapshot belongs to',
+                `plugin_gitplugins_sources_id` INT UNSIGNED NULL DEFAULT NULL COMMENT 'Source the update ran from (NULL if unknown)',
+                `version`           VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'The plugin version captured (the version being replaced)',
+                `sha`               VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Installed commit SHA at capture time, when known',
+                `files_archive_path` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Absolute path to the inert out-of-web-tree file backup zip (R2)',
+                `db_dump_path`      VARCHAR(255) NULL DEFAULT NULL COMMENT 'Absolute path to the gzipped owned-tables dump (R8), when captured',
+                `date_creation`     DATETIME     NULL DEFAULT NULL COMMENT 'When the snapshot was captured',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Retained pre-update snapshots (files + owned DB tables) for one-click version rollback'"
+        );
+    }
+
+    // ---- known_issues: curated conflict/advisory registry (Phase 7) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_known_issues')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_known_issues` (
+                `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Plugin the issue concerns (* = any plugin, a global advisory)',
+                `version_range` VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Affected version range of plugin_key (whitespace-AND comparators or A - B; empty = any)',
+                `kind`          ENUM('conflict','advisory','min_peer') NOT NULL DEFAULT 'advisory' COMMENT 'conflict (bad peer combo) | advisory (free-text warning) | min_peer (peer present but out of required range)',
+                `peer_key`      VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'The peer plugin for conflict/min_peer kinds (empty for advisory)',
+                `peer_range`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Peer version range the rule applies to (empty = any installed version)',
+                `message`       VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Generic human-readable advisory (no secrets)',
+                `source`        VARCHAR(64)  NOT NULL DEFAULT 'builtin' COMMENT 'Origin of the row (builtin = shipped seed, or a catalog id); refreshed wholesale per source',
+                `date_creation` DATETIME     NULL DEFAULT NULL COMMENT 'When the row was seeded',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`),
+                KEY `idx_source`     (`source`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Curated known-bad plugin combinations / advisories consulted at install-confirm'"
+        );
+    }
+
+    // ---- targets: registered GLPI instances that PULL a signed deploy manifest (Phase 3) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_targets')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_targets` (
+                `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `name`          VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Unique target identifier the instance signs its pull requests with',
+                `base_url`      VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Informational base URL of the target GLPI instance (pull model: the target reaches us, not vice-versa)',
+                `secret`        TEXT         NULL DEFAULT NULL COMMENT 'GLPIKey-encrypted shared HMAC secret (write-only; never logged or echoed)',
+                `is_active`     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Disabled targets cannot authenticate a pull',
+                `last_pull_at`  DATETIME     NULL DEFAULT NULL COMMENT 'When this target last successfully pulled the deploy manifest',
+                `date_creation` DATETIME     NULL DEFAULT NULL COMMENT 'Row creation timestamp',
+                `date_mod`      DATETIME     NULL DEFAULT NULL COMMENT 'Last modification timestamp',
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_name` (`name`),
+                KEY `idx_active` (`is_active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Registered GLPI targets that pull a signed, SHA-pinned deploy manifest (Phase 3, pull model)'"
+        );
+    }
+
+    // ---- catalog: cached convergent plugin catalog (Phase 10) ----
+    if (!$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_catalog` (
+                `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_key`  VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'GLPI plugin key from the catalog manifest',
+                `name`        VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Display name',
+                `url`         VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'HTTPS repository URL',
+                `ref_policy`  VARCHAR(32)  NOT NULL DEFAULT 'latest_tag' COMMENT 'Recommended ref policy for this plugin',
+                `category`    VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'Grouping category',
+                `description` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Short description',
+                `catalog_source` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'The catalog manifest URL this entry came from (multi-catalog: each source refreshes independently)',
+                `updated_at`  DATETIME     NULL DEFAULT NULL COMMENT 'When this row was last refreshed from the manifest',
+                PRIMARY KEY (`id`),
+                KEY `idx_plugin_key` (`plugin_key`),
+                KEY `idx_category`   (`category`),
+                KEY `idx_catalog_source` (`catalog_source`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Cached convergent plugin catalog (advisory browse+prefill; every install still confirmed)'"
+        );
+    }
+
     // ---- single-row config (host allowlist, caps, cadence) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_config')) {
         $DB->doQuery(
@@ -107,6 +189,15 @@ function plugin_gitplugins_install(): bool
                 `check_frequency_minutes` SMALLINT UNSIGNED NOT NULL DEFAULT 1440 COMMENT 'Update-check cadence in minutes (clamped 5..40320)',
                 `notify_updates`       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available',
                 `notify_recipient`     VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email',
+                `carry_over_dirs`      JSON         NULL DEFAULT NULL COMMENT 'JSON list of runtime-built dir names preserved across an update (default vendor + node_modules)',
+                `auto_cache_clear`     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)',
+                `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)',
+                `snapshot_max_mb`      SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)',
+                `allow_local_sources`  TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)',
+                `local_source_roots`   JSON         NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)',
+                `rollback_keep`        SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)',
+                `health_fail_action`   ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback',
+                `catalog_url`          TEXT         NULL DEFAULT NULL COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Single-row plugin config: SSRF host allowlist, install policy, download/timeout caps'"
         );
@@ -119,6 +210,13 @@ function plugin_gitplugins_install(): bool
 
     // Idempotent upgrade for instances created under an earlier dev schema.
     plugin_gitplugins_migrate($DB);
+
+    // Seed / refresh the shipped known-issues registry (Phase 7). Idempotent:
+    // replaces the 'builtin' source rows wholesale, leaving any admin/catalog
+    // rows untouched. Best-effort — never fails the install.
+    if (class_exists('PluginGitpluginsKnownissues')) {
+        PluginGitpluginsKnownissues::seedFromShipped();
+    }
 
     // Grant plugin_gitplugins right (ALLSTANDARDRIGHT) ONLY to profiles that
     // already hold config UPDATE — A01: this is the highest-privilege capability
@@ -166,6 +264,22 @@ function plugin_gitplugins_install(): bool
         ]
     );
 
+    // Apply-queued-updates worker (Phase 9 bulk apply). Shorter cadence than the
+    // full check so a bulk "Update selected" applies promptly; runs the same
+    // Phase 0 pipeline, each install independently verified/rolled-back.
+    CronTask::Register(
+        'PluginGitpluginsUpdatecheck',
+        'applyUpdates',
+        15 * MINUTE_TIMESTAMP,
+        [
+            'comment'      => 'Apply plugin installs/updates queued from the bulk dry-run',
+            'mode'         => CronTask::MODE_EXTERNAL,
+            'allowmode'    => CronTask::MODE_INTERNAL | CronTask::MODE_EXTERNAL,
+            'logslifetime' => 30,
+            'state'        => CronTask::STATE_WAITING,
+        ]
+    );
+
     return true;
 }
 
@@ -184,6 +298,9 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'update_available'  => "ADD COLUMN `update_available` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Cached flag: 1 when the available version/SHA differs from the installed one (drives the UI badge, no fetch at render)'",
             'last_notified_sha' => "ADD COLUMN `last_notified_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'available_version|available_sha last included in an emailed digest (anti-spam: re-send only when the available set changes)'",
             'last_notified_at'  => "ADD COLUMN `last_notified_at` DATETIME NULL DEFAULT NULL COMMENT 'When this row was last included in an emailed update digest'",
+            'health'            => "ADD COLUMN `health` ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation'",
+            'health_detail'     => "ADD COLUMN `health_detail` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)'",
+            'hook_warnings'     => "ADD COLUMN `hook_warnings` JSON NULL DEFAULT NULL COMMENT 'Cached JSON list of post-install \$PLUGIN_HOOKS collisions with other active plugins (Phase 6 badge)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($inst, $col)) {
@@ -240,6 +357,36 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
         );
     }
 
+    // Add the R5 per-source build opt-in on already-installed boxes.
+    if ($DB->tableExists($src) && !$DB->fieldExists($src, 'build_on_install')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$src}` ADD COLUMN `build_on_install` TINYINT(1) NOT NULL DEFAULT 0 "
+            . "COMMENT 'Opt-in: run composer/npm build in the staged tree before install (runs third-party build code; OFF by default)'"
+        );
+    }
+
+    // Widen the provider ENUM to include 'local' (Phase 1). Idempotent MODIFY.
+    if ($DB->tableExists($src) && $DB->fieldExists($src, 'provider')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$src}` MODIFY COLUMN `provider` "
+            . "ENUM('github','gitlab','gitea','forgejo','local','unknown') NOT NULL DEFAULT 'unknown' "
+            . "COMMENT 'Detected forge provider (or local filesystem source), drives the acquire/ref-resolution strategy'"
+        );
+    }
+
+    // Multi-catalog: tag each cached catalog row with the manifest URL it came
+    // from, so several catalogs coexist and refresh independently (Phase 10 ext).
+    $cat = 'glpi_plugin_gitplugins_catalog';
+    if ($DB->tableExists($cat) && !$DB->fieldExists($cat, 'catalog_source')) {
+        $DB->doQuery(
+            "ALTER TABLE `{$cat}` ADD COLUMN `catalog_source` VARCHAR(255) NOT NULL DEFAULT '' "
+            . "COMMENT 'The catalog manifest URL this entry came from (multi-catalog: each source refreshes independently)'"
+        );
+        if (!isIndex($cat, 'idx_catalog_source')) {
+            $DB->doQuery("ALTER TABLE `{$cat}` ADD KEY `idx_catalog_source` (`catalog_source`)");
+        }
+    }
+
     $cfg = 'glpi_plugin_gitplugins_config';
     if ($DB->tableExists($cfg)) {
         $cols = [
@@ -247,11 +394,28 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'allow_auto_install' => "ADD COLUMN `allow_auto_install` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether the cron worker may auto-install/update without manual approval'",
             'notify_updates'    => "ADD COLUMN `notify_updates` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether the digest cron emails admins when managed plugins have updates available'",
             'notify_recipient'  => "ADD COLUMN `notify_recipient` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Optional explicit digest recipient email override; empty falls back to Super-Admin users / GLPI admin_email'",
+            'carry_over_dirs'   => "ADD COLUMN `carry_over_dirs` JSON NULL DEFAULT NULL COMMENT 'JSON list of runtime-built dir names preserved across an update (default vendor + node_modules)'",
+            'auto_cache_clear'  => "ADD COLUMN `auto_cache_clear` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Whether to clear GLPI caches after a plugin install/activate (avoids stale-route 404s)'",
+            'build_timeout_seconds' => "ADD COLUMN `build_timeout_seconds` SMALLINT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Per-build wall-clock cap for composer/npm build steps in seconds (clamped 30..1800)'",
+            'snapshot_max_mb'   => "ADD COLUMN `snapshot_max_mb` SMALLINT UNSIGNED NOT NULL DEFAULT 100 COMMENT 'Size cap in MB for the pre-migration DB snapshot; over this we skip+warn (0 = unlimited)'",
+            'allow_local_sources' => "ADD COLUMN `allow_local_sources` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Whether LOCAL/dev filesystem sources are permitted (OFF by default; unsafe on hosted installs)'",
+            'local_source_roots' => "ADD COLUMN `local_source_roots` JSON NULL DEFAULT NULL COMMENT 'JSON allowlist of absolute path roots a LOCAL source may live under (empty = none)'",
+            'rollback_keep'     => "ADD COLUMN `rollback_keep` SMALLINT UNSIGNED NOT NULL DEFAULT 3 COMMENT 'How many pre-update snapshots to retain per plugin for rollback (0 = keep none; clamped 0..50)'",
+            'health_fail_action' => "ADD COLUMN `health_fail_action` ENUM('flag','rollback') NOT NULL DEFAULT 'flag' COMMENT 'What to do when a post-install health check FAILS: flag red (keep active) or auto-rollback'",
+            'catalog_url'       => "ADD COLUMN `catalog_url` TEXT NULL DEFAULT NULL COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($cfg, $col)) {
                 $DB->doQuery("ALTER TABLE `{$cfg}` {$ddl}");
             }
+        }
+        // Widen catalog_url to TEXT on boxes that added it as VARCHAR(255) before
+        // multi-catalog support (idempotent MODIFY; holds several URLs newline-sep).
+        if ($DB->fieldExists($cfg, 'catalog_url')) {
+            $DB->doQuery(
+                "ALTER TABLE `{$cfg}` MODIFY COLUMN `catalog_url` TEXT NULL DEFAULT NULL "
+                . "COMMENT 'Plugin catalog manifest URL(s), one https URL per line (vendor-neutral; SSRF-allowlisted; advisory browse+prefill)'"
+            );
         }
         // Top up the host allowlist with the GitHub release-download hosts so the
         // 'release' policy passes the SSRF host check on already-installed boxes.
@@ -285,8 +449,19 @@ function plugin_gitplugins_uninstall(): bool
 
     $DB->doQuery("DELETE FROM `glpi_profilerights` WHERE `name` = 'plugin_gitplugins'");
 
+    // Best-effort: remove retained rollback snapshot files (inert out-of-web-tree
+    // backups + DB dumps) before dropping the table that indexes them, so nothing
+    // is orphaned on disk.
+    if (class_exists('PluginGitpluginsRollback')) {
+        PluginGitpluginsRollback::purgeAll($DB);
+    }
+
     foreach ([
         'glpi_plugin_gitplugins_logs',
+        'glpi_plugin_gitplugins_snapshots',
+        'glpi_plugin_gitplugins_known_issues',
+        'glpi_plugin_gitplugins_catalog',
+        'glpi_plugin_gitplugins_targets',
         'glpi_plugin_gitplugins_installs',
         'glpi_plugin_gitplugins_sources',
         'glpi_plugin_gitplugins_config',

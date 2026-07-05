@@ -169,6 +169,65 @@ final class PluginGitpluginsRefResolver
     }
 
     /**
+     * Build the candidate raw-file URLs for an arbitrary repo-root file (e.g.
+     * CHANGELOG.md) at (provider, repo URL, ref) — PURE. Same host shapes as
+     * rawManifestUrls, but for a caller-named file. The filename is restricted to
+     * a safe basename subset (alnum, dot, underscore, hyphen) so it can never
+     * traverse or inject path segments. Empty ref → HEAD/main/master fallbacks.
+     *
+     * @param  string   $file repo-root filename (validated basename)
+     * @return string[] ordered candidate raw URLs (possibly empty)
+     */
+    public static function rawFileUrls(string $provider, string $url, string $ref, string $file): array
+    {
+        // Only a plain basename — no slashes, no traversal, no CRLF.
+        if ($file === '' || !preg_match('/^[A-Za-z0-9._-]+$/', $file) || str_contains($file, '..')) {
+            return [];
+        }
+        $repo = self::repoPath($url);
+        if ($repo === null) {
+            return [];
+        }
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        $host   = (string) parse_url($url, PHP_URL_HOST);
+        if ($scheme !== 'https' || $host === '') {
+            return [];
+        }
+
+        $refs = [];
+        $ref  = trim($ref);
+        if ($ref !== '' && self::isValidRef($ref)) {
+            $refs[] = $ref;
+        }
+        foreach (['HEAD', 'main', 'master'] as $d) {
+            if (!in_array($d, $refs, true)) {
+                $refs[] = $d;
+            }
+        }
+
+        $out = [];
+        foreach ($refs as $r) {
+            $encRef     = rawurlencode($r);
+            $candidates = match ($provider) {
+                'github'           => ["https://raw.githubusercontent.com/{$repo}/{$encRef}/{$file}"],
+                'gitlab'           => [sprintf('https://%s/%s/-/raw/%s/%s', $host, $repo, $encRef, $file)],
+                'gitea', 'forgejo' => [
+                    sprintf('https://%s/%s/raw/branch/%s/%s', $host, $repo, $encRef, $file),
+                    sprintf('https://%s/%s/raw/%s/%s', $host, $repo, $encRef, $file),
+                ],
+                default            => [],
+            };
+            foreach ($candidates as $candidate) {
+                if (!in_array($candidate, $out, true)) {
+                    $out[] = $candidate;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Build the candidate "release" API URLs for (provider, repo URL, ref) — PURE.
      *
      * Used by the `release` ref policy: instead of a git source-tarball, the source

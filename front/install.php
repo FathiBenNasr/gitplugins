@@ -49,8 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // The release policy resolves its version only at fetch time, so "skip" here
     // would mean an unknown available version — let the admin (re)install/update
-    // anyway; the runner fetches the latest release tarball.
-    if ((string) ($source['ref_policy'] ?? '') === 'release' && $decision === 'skip') {
+    // anyway; the runner fetches the latest release tarball. LOCAL sources are a
+    // dev workflow where re-syncing the SAME version on demand is the whole point,
+    // so a "skip" there is also treated as a re-sync.
+    $isLocalSrc = (string) ($source['provider'] ?? '') === 'local';
+    if (($isLocalSrc || (string) ($source['ref_policy'] ?? '') === 'release') && $decision === 'skip') {
         $decision = $installed === '' ? 'install' : 'update';
     }
     if ($decision === 'skip') {
@@ -97,6 +100,76 @@ $csrf = Session::getNewCSRFToken();
       <dt class="col-sm-4"><?= htmlspecialchars(__('Installed version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars($installed ?: __('not installed', 'gitplugins')) ?></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Available version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) ($resolved['version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></dd>
     </dl>
+<?php
+    // Phase 4 preflight report: "will this install cleanly here?" — reuses the R6
+    // gate function against the host. Requirements from this plugin's known-needs
+    // heuristic (the fetched plugin.xml refines them at install time).
+    $pf = PluginGitpluginsPreflight::checkEnvironment(
+        PluginGitpluginsPreflight::requirementsFor([], (string) $source['plugin_key'])
+    );
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('Environment preflight', 'gitplugins')) ?>
+      <?php if ($pf['ok']): ?><span class="badge bg-success"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span><?php else: ?><span class="badge bg-danger"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span><?php endif; ?>
+    </h5>
+<?php if (!$pf['ok']): ?>
+    <div class="alert alert-danger py-2"><ul class="mb-0">
+<?php foreach ($pf['blockers'] as $b): ?>
+      <li><?= htmlspecialchars((string) $b) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
+<?php if (!empty($pf['warnings'])): ?>
+    <div class="alert alert-warning py-2"><ul class="mb-0">
+<?php foreach ($pf['warnings'] as $w): ?>
+      <li><?= htmlspecialchars((string) $w) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
+<?php if ($pf['ok'] && empty($pf['warnings'])): ?>
+    <div class="form-text"><?= htmlspecialchars(__('GLPI/PHP versions and required extensions satisfied on this host. The fetched plugin.xml is re-checked at install time.', 'gitplugins')) ?></div>
+<?php endif; ?>
+<?php
+    // Phase 7 known-issues: consult the curated registry for this plugin at its
+    // available version against the currently-installed active peers. Advisory
+    // only — every install still runs the full confirm + preflight gate.
+    $issues = PluginGitpluginsKnownissues::warningsFor(
+        (string) $source['plugin_key'],
+        (string) ($resolved['version'] ?? '')
+    );
+    if ($issues !== []):
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('Known issues', 'gitplugins')) ?>
+      <span class="badge bg-warning"><?= (int) count($issues) ?></span>
+    </h5>
+    <div class="alert alert-warning py-2 mb-0"><ul class="mb-0">
+<?php foreach ($issues as $iss): ?>
+      <li><?php if (($iss['kind'] ?? '') !== 'advisory' && ($iss['peer_key'] ?? '') !== ''): ?><span class="badge bg-secondary me-1"><?= htmlspecialchars((string) $iss['kind']) ?>: <?= htmlspecialchars((string) $iss['peer_key']) ?></span><?php endif; ?><?= htmlspecialchars((string) ($iss['message'] ?? '')) ?></li>
+<?php endforeach; ?>
+    </ul></div>
+<?php endif; ?>
+<?php
+    // Phase 8 changelog: fetch CHANGELOG.md at the resolved ref (SSRF-guarded,
+    // size-capped) and show ONLY the sections between installed and available —
+    // "what a click will change". Best-effort; silent when none is found. Rendered
+    // as escaped preformatted text (NOT raw HTML) — this is untrusted upstream
+    // content, so it must never be injected as markup.
+    $changelog = PluginGitpluginsChangelog::fetchFor(
+        $source,
+        (string) ($resolved['ref'] ?? ''),
+        $installed,
+        (string) ($resolved['version'] ?? '')
+    );
+    if (trim($changelog) !== ''):
+?>
+    <hr>
+    <h5 class="mb-2"><?= htmlspecialchars(__('What changes', 'gitplugins')) ?></h5>
+    <details open>
+      <summary class="text-muted small mb-1"><?= htmlspecialchars(__('Changelog between the installed and available version', 'gitplugins')) ?></summary>
+      <pre class="border rounded p-2 bg-body-tertiary" style="max-height:22rem;overflow:auto;white-space:pre-wrap"><?= htmlspecialchars($changelog) ?></pre>
+    </details>
+<?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
     <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue this install/update?', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>
