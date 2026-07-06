@@ -40,7 +40,7 @@ exactly like marketplace ones (their own install hooks run).
   badges, last check/result; remove-from-management without uninstalling the GLPI
   plugin.
 
-### Robustness & trust (0.2.0)
+### Robustness & trust (1.0.0)
 
 - **Verified install pipeline** — environment **preflight gate**, optional
   **composer/npm build** for source tarballs, **`.po`→`.mo`** locale compile,

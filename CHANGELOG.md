@@ -5,7 +5,7 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-07-05
+## [1.0.0] - 2026-07-05
 
 Robustness + trust programme: turn "place and hope" into "place, build, verify, and roll back," and add browse/bulk/deploy surfaces. All new logic ships with pure unit tests (178 total).
 
@@ -29,7 +29,7 @@ Robustness + trust programme: turn "place and hope" into "place, build, verify, 
 - Pre-update backups are **neutralised**: relocated out of the web tree into `GLPI_VAR_DIR`, stored as inert `.zip` (never a runnable PHP tree under `plugins/`), `0600/0700`, web-user owned — a leaked backup cannot be executed to re-introduce a vulnerable version.
 - New fetch targets (changelog, catalog, deploy manifest) all go through the existing SSRF guard + host allowlist; the deploy manifest is HMAC-signed with a freshness/replay window and carries no secrets.
 
-[0.2.0]: https://github.com/FathiBenNasr/gitplugins/releases/tag/v0.2.0
+[1.0.0]: https://github.com/FathiBenNasr/gitplugins/releases/tag/v1.0.0
 
 ## [0.1.0] - 2026-06-21
 
