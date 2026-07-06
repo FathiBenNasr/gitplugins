@@ -36,8 +36,39 @@ exactly like marketplace ones (their own install hooks run).
   "update available" flag (drives the UI badge); a daily cron emails a digest of
   managed plugins with updates available (anti-spam: only when the available
   set changes).
-- **Status view** — installed vs available version/SHA, last check/result;
-  remove-from-management without uninstalling the GLPI plugin.
+- **Status view** — installed vs available version/SHA, health, hook/known-issue
+  badges, last check/result; remove-from-management without uninstalling the GLPI
+  plugin.
+
+### Robustness & trust (1.0.0)
+
+- **Verified install pipeline** — environment **preflight gate**, optional
+  **composer/npm build** for source tarballs, **`.po`→`.mo`** locale compile,
+  atomic placement that **carries over** `vendor/`/`node_modules/`, a
+  **pre-migration DB snapshot**, then **post-install verify + self-heal**. A
+  failed migration leaves the previous working version active (files **and**
+  schema).
+- **One-click version rollback** — each update retains an inert file backup + a
+  scoped DB dump as a **snapshot** (keep last *N*, default 3); revert restores
+  files + owned tables, re-registers and verifies.
+- **Post-install health gate** — calls the target's own
+  `check_prerequisites()`/`check_config()` and badges the verdict
+  (`ok|warn|fail|unknown`); a `fail` either flags red (default) or auto-rolls-back.
+- **Hook-collision detector** — warns when a plugin hooks the same item event +
+  itemtype as another active plugin.
+- **Known-issues registry** — curated conflict/advisory dataset (shipped seed +
+  catalog-fed), shown on install-confirm and status.
+- **Changelog on confirm** — fetches `CHANGELOG.md` at the resolved ref
+  (SSRF-guarded) and shows the sections between installed and available.
+- **Bulk update + dry-run** — a non-mutating plan (action / migration / preflight
+  / known-issues) with select-and-queue; a 15-minute apply cron runs the queue.
+- **Plugin catalog** — browse one or more **vendor-neutral** JSON catalog
+  manifests (your own and/or a third party's) and one-click pre-fill a source.
+- **Local / dev source type** — install from an allowlisted filesystem path
+  (off by default), replacing per-plugin `deploy.sh`.
+- **Multi-target deploy (pull model)** — serve a read-only, **HMAC-signed,
+  SHA-pinned** deploy manifest that other GLPI instances pull and install through
+  their own verified pipeline — **no inbound code-execution endpoint**.
 
 ## Requirements
 
@@ -91,6 +122,12 @@ Menu: **Setup → Git Plugin Installer**.
 3. **Stay current** — the hourly update-check raises an **update badge** when a
    newer ref/version is available; the daily **email digest** notifies the
    configured recipient (or Super-Admins) of pending updates.
+4. **Bulk & browse** — the **Status** page links to a **Bulk update (dry-run)**
+   report (preview action/migration/preflight/known-issues, tick and queue), a
+   **Catalog** browser (one-click pre-fill a source from a configured manifest),
+   and **Targets** (register instances that pull the signed deploy manifest). When
+   an update ships badly, use the per-plugin **Rollback** control to restore the
+   previous version (files + schema) in one click.
 
 ## Configuration
 
@@ -108,6 +145,15 @@ Menu: **Setup → Git Plugin Installer**.
 | **Allow downgrading to an older version** | OFF by default; downgrades refused unless enabled. |
 | **Email a digest when updates are available** (`notify_updates`) | ON by default. |
 | **Digest recipient** (`notify_recipient`) | Optional email override; blank → all active Super-Admins / GLPI admin email. |
+| **Carry-over dirs** (`carry_over_dirs`) | Runtime-built dirs preserved across an update (default `vendor`, `node_modules`). |
+| **Auto cache-clear** (`auto_cache_clear`) | Clear GLPI caches after activate (ON by default; avoids stale-route 404s). |
+| **Build timeout (seconds)** (`build_timeout_seconds`) | Cap for composer/npm build steps (30–1800, default 300). |
+| **DB snapshot cap (MB)** (`snapshot_max_mb`) | Pre-migration snapshot size cap; over it, skip+warn (0 = unlimited). |
+| **Allow local/dev sources** (`allow_local_sources`) | OFF by default; reads the server filesystem. |
+| **Local source roots** (`local_source_roots`) | Absolute-path allowlist a local source must sit under (empty = none). |
+| **Rollback snapshots to keep** (`rollback_keep`) | Pre-update snapshots retained per plugin for one-click rollback (0–50, default 3). |
+| **On failed health check** (`health_fail_action`) | `flag` red and keep active (default) or `rollback` to the previous version. |
+| **Plugin catalog manifest URLs** (`catalog_url`) | One or more https catalog manifests (one per line) — your own and/or a third party's — to browse on the Catalog page. Vendor-neutral. |
 
 ## Permissions
 
@@ -148,13 +194,18 @@ remote-acquisition and safety steps, then hands off to core:
   mapping is a **pure, unit-tested** builder (`PluginGitpluginsRefResolver`).
 - **CronTasks** (`PluginGitpluginsUpdatecheck`, web + CLI cron) — `checkUpdates`
   (hourly: resolve refs, set the cached update-available flag, run queued
-  install/update actions) and `notifyUpdates` (daily: email the update digest).
+  install/update actions), `applyUpdates` (every 15 min: apply the bulk-queued
+  updates through the verified pipeline), and `notifyUpdates` (daily: email the
+  update digest).
 
-The schema is four tables, all prefixed `glpi_plugin_gitplugins_`: `sources`,
-`installs`, `logs`, `config`. The plugin writes **only** to
+The schema is eight tables, all prefixed `glpi_plugin_gitplugins_`: `sources`,
+`installs`, `logs`, `config`, plus `snapshots` (retained rollback points),
+`known_issues` (conflict/advisory registry), `catalog` (cached catalog manifests),
+and `targets` (pull-model deploy targets). The plugin writes **only** to
 `glpi_plugin_gitplugins_*` (plus `glpi_profilerights` for its right) and **reads**
 the core `glpi_plugins` table for discovery. See [`docs/SCHEMA.md`](docs/SCHEMA.md)
-for the full data model.
+and [`docs/ENHANCEMENTS-SPEC.md`](docs/ENHANCEMENTS-SPEC.md) for the full data
+model and the phased design notes.
 
 ## Security
 
@@ -168,6 +219,13 @@ to **OWASP Top 10 (2021)** / **ASVS L2+**:
 - **Zip/tar-slip** — every archive entry sanitised before write; extraction into
   a fresh temp dir; single-root layout validated; **atomic placement** with
   backup-and-restore.
+- **Neutralised backups** — pre-update backups are relocated **out of the web
+  tree** (into `GLPI_VAR_DIR`) as an inert `.zip` (never a runnable PHP tree under
+  `plugins/`), `0600/0700`, web-user owned — a leaked backup cannot be executed to
+  re-introduce a vulnerable version.
+- **Multi-target deploy** — pull model only: the origin serves a read-only,
+  **HMAC-signed, SHA-pinned** deploy manifest (freshness/replay window, no
+  secrets); there is **no inbound code-execution endpoint** on any instance.
 - **A01 Broken Access Control** — dedicated `plugin_gitplugins` right, granted
   only to `config: UPDATE` profiles; every front/ajax entry checks login + right.
 - **Secrets** — credentials **GLPIKey-encrypted** at rest, sent only as an auth

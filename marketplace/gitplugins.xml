@@ -15,12 +15,16 @@
 A meta-plugin for GLPI 11 that installs and updates other plugins from a git/HTTPS source — useful for plugins not on the official marketplace (private or self-hosted repos). It extends GLPI's native install/activate machinery rather than replacing it: it owns a security-hardened fetch and extraction step, then drives GLPI core's own Plugin::install()/activate() seam so managed plugins behave like marketplace ones.
 
 **Features:**
-- Register a source: repo URL + ref policy (track a branch, latest release tag, or pin a tag / commit SHA), optional encrypted token for private repos
-- HTTPS tarball download (no git binary); confirm-before-install showing the resolved ref + commit SHA
-- Update-check cron; installs run out of the web request and are resumable
-- Status view: installed vs available version, last check/result; remove-from-management without uninstalling
+- Register a source: repo URL + ref policy (track a branch, latest release tag, prebuilt release .tgz, or pin a tag / commit SHA), optional encrypted token for private repos — or a local/dev filesystem path (allowlisted, off by default)
+- HTTPS tarball download (no git binary); confirm-before-install showing the resolved ref + commit SHA, the environment preflight, the changelog between installed and available, and any known-issue advisories
+- Robust install pipeline: preflight gate, optional composer/npm build, .po→.mo locale compile, atomic placement with a neutralised out-of-web-tree backup, pre-migration DB snapshot, post-install verify + self-heal, and one-click rollback to a retained previous version (files + schema)
+- Post-install health gate (calls the target's own prerequisites/config checks) and a hook-collision detector
+- Bulk update with a non-mutating dry-run report; update-check + apply crons run out of the web request and are resumable
+- Plugin catalog: browse one or more vendor-neutral JSON manifests (your own and/or a third party's) and one-click pre-fill a source
+- Multi-target deploy (pull model): serve a read-only, HMAC-signed, SHA-pinned deploy manifest that other GLPI instances pull and install through their own verified pipeline — no inbound code-execution endpoint
+- Status view: installed vs available version, health, last check/result; remove-from-management without uninstalling
 
-Security-hardened (OWASP Top 10 / ASVS L2+): SSRF-guarded fetch (DNS resolution + private/loopback/link-local/metadata-IP blocking, host allowlist, proxy-aware), zip-slip-safe extraction with atomic placement, GLPIKey-encrypted credentials, highest-privilege right, full audit log.
+Security-hardened (OWASP Top 10 / ASVS L2+): SSRF-guarded fetch (DNS resolution + private/loopback/link-local/metadata-IP blocking, host allowlist, proxy-aware), zip-slip-safe extraction with atomic placement, neutralised inert out-of-web-tree backups, GLPIKey-encrypted credentials, highest-privilege right, full audit log.
 
 Developed by [Convergent Cloud Computing](https://www.convergent.tn).
          </en>
@@ -28,12 +32,16 @@ Developed by [Convergent Cloud Computing](https://www.convergent.tn).
 Méta-plugin pour GLPI 11 qui installe et met à jour d'autres plugins depuis une source git/HTTPS — utile pour les plugins absents de la marketplace officielle (dépôts privés ou auto-hébergés). Il étend le mécanisme d'installation/activation natif de GLPI au lieu de le remplacer : il prend en charge un téléchargement et une extraction durcis, puis pilote l'API publique Plugin::install()/activate() du cœur de GLPI.
 
 **Fonctionnalités :**
-- Enregistrement d'une source : URL du dépôt + politique de référence (branche, dernier tag, ou épinglage tag / SHA de commit), jeton chiffré optionnel pour les dépôts privés
-- Téléchargement d'archive HTTPS (sans binaire git) ; confirmation avant installation affichant la référence et le SHA résolus
-- Tâche planifiée de vérification des mises à jour ; les installations s'exécutent hors requête web et sont reprenables
-- Vue d'état : version installée vs disponible, dernière vérification/résultat ; retrait de la gestion sans désinstallation
+- Enregistrement d'une source : URL du dépôt + politique de référence (branche, dernier tag, archive de release prête, ou épinglage tag / SHA de commit), jeton chiffré optionnel pour les dépôts privés — ou un chemin local/dev (liste blanche, désactivé par défaut)
+- Téléchargement d'archive HTTPS (sans binaire git) ; confirmation avant installation affichant la référence et le SHA résolus, le contrôle d'environnement, le journal des modifications et les problèmes connus
+- Pipeline d'installation robuste : contrôle d'environnement, build composer/npm optionnel, compilation des locales .po→.mo, placement atomique avec sauvegarde neutralisée hors arborescence web, instantané de la base avant migration, vérification et auto-réparation, et retour arrière en un clic vers une version conservée (fichiers + schéma)
+- Contrôle de santé après installation (vérifications prérequis/config du plugin cible) et détecteur de collisions de hooks
+- Mise à jour groupée avec rapport de simulation sans modification ; les tâches planifiées s'exécutent hors requête web et sont reprenables
+- Catalogue de plugins : parcourez un ou plusieurs manifestes JSON (le vôtre et/ou celui d'un tiers) et pré-remplissez une source en un clic
+- Déploiement multi-cibles (modèle pull) : sert un manifeste signé HMAC et épinglé au SHA que d'autres instances GLPI récupèrent et installent via leur propre pipeline vérifié — sans point d'entrée d'exécution de code entrant
+- Vue d'état : version installée vs disponible, santé, dernière vérification/résultat ; retrait de la gestion sans désinstallation
 
-Durci côté sécurité (OWASP Top 10 / ASVS L2+) : téléchargement protégé contre la SSRF, extraction protégée contre le zip-slip avec placement atomique, identifiants chiffrés via GLPIKey, droit à privilège élevé, journal d'audit complet.
+Durci côté sécurité (OWASP Top 10 / ASVS L2+) : téléchargement protégé contre la SSRF, extraction protégée contre le zip-slip avec placement atomique, sauvegardes inertes neutralisées hors arborescence web, identifiants chiffrés via GLPIKey, droit à privilège élevé, journal d'audit complet.
 
 Développé par [Convergent Cloud Computing](https://www.convergent.tn).
          </fr>
@@ -48,6 +56,11 @@ Développé par [Convergent Cloud Computing](https://www.convergent.tn).
       <author>Fathi Ben Nasr — Convergent Cloud Computing</author>
    </authors>
    <versions>
+      <version>
+         <num>1.0.0</num>
+         <compatibility>~11.0</compatibility>
+         <download_url>https://github.com/FathiBenNasr/gitplugins/releases/download/v1.0.0/gitplugins-1.0.0.tgz</download_url>
+      </version>
       <version>
          <num>0.1.0</num>
          <compatibility>~11.0</compatibility>

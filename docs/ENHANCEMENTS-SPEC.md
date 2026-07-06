@@ -10,7 +10,7 @@
 > rollback, cache-clear). Do not start a feature phase until Phase 0 is merged
 > and its tests pass.
 >
-> **Design invariants (unchanged from CLAUDE.md / SCHEMA.md):**
+> **Design invariants (unchanged from the project brief / SCHEMA.md):**
 > - Meta-plugin: **no business functionality of its own**; extend GLPI's native
 >   `Plugin::install()/activate()` seam, never a parallel installer.
 > - Touch **only** `glpi_plugin_gitplugins_*` tables; read core `glpi_plugins`
