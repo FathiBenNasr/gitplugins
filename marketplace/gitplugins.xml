@@ -59,7 +59,7 @@ Développé par [Convergent Cloud Computing](https://www.convergent.tn).
       <version>
          <num>1.0.0</num>
          <compatibility>~11.0</compatibility>
-         <download_url>https://github.com/FathiBenNasr/gitplugins/releases/download/v1.0.0/gitplugins-1.0.0.tgz</download_url>
+         <download_url>https://github.com/FathiBenNasr/gitplugins/archive/refs/tags/v1.0.0.tar.gz</download_url>
       </version>
       <version>
          <num>0.1.0</num>
