@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_GITPLUGINS_VERSION', '1.0.0');
+define('PLUGIN_GITPLUGINS_VERSION', '1.0.1');
 // GLPI 11 only — uses the namespaced plugin API + Toolbox::getGuzzleClient().
 define('PLUGIN_GITPLUGINS_MIN_GLPI', '11.0.0');
 define('PLUGIN_GITPLUGINS_MAX_GLPI', '11.99.99');

@@ -5,6 +5,21 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-07-21
+
+Packaging and hygiene release for the public GLPI plugin catalogue. No functional feature changes.
+
+### Changed
+- Default SSRF host allowlist is now GitHub (+ its download hosts) and GitLab only; a self-hosted git host is added explicitly in Configuration.
+- `homepage` now points at the public GitHub repository.
+
+### Fixed
+- `LICENSE` now contains the full verbatim GPL-2.0 text (previously a truncated stub with the wrong project name).
+
+### Packaging
+- Added `.gitattributes` `export-ignore` so release archives exclude `tests/`, `CLAUDE.md`, `CODING_PLAN.md`, `docs/ENHANCEMENTS-SPEC.md` and `phpunit.xml`.
+- Vendor-neutral example catalog manifest; no internal hosts in shipped files.
+
 ## [1.0.0] - 2026-07-05
 
 Robustness + trust programme: turn "place and hope" into "place, build, verify, and roll back," and add browse/bulk/deploy surfaces. All new logic ships with pure unit tests (178 total).
@@ -29,6 +44,7 @@ Robustness + trust programme: turn "place and hope" into "place, build, verify, 
 - Pre-update backups are **neutralised**: relocated out of the web tree into `GLPI_VAR_DIR`, stored as inert `.zip` (never a runnable PHP tree under `plugins/`), `0600/0700`, web-user owned — a leaked backup cannot be executed to re-introduce a vulnerable version.
 - New fetch targets (changelog, catalog, deploy manifest) all go through the existing SSRF guard + host allowlist; the deploy manifest is HMAC-signed with a freshness/replay window and carries no secrets.
 
+[1.0.1]: https://github.com/FathiBenNasr/gitplugins/releases/tag/v1.0.1
 [1.0.0]: https://github.com/FathiBenNasr/gitplugins/releases/tag/v1.0.0
 
 ## [0.1.0] - 2026-06-21
