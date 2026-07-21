@@ -32,7 +32,7 @@ final class SourceTest extends TestCase
     {
         self::assertSame('github', PluginGitpluginsSource::deriveProvider('https://github.com/foo/bar'));
         self::assertSame('gitlab', PluginGitpluginsSource::deriveProvider('https://gitlab.com/foo/bar'));
-        self::assertSame('forgejo', PluginGitpluginsSource::deriveProvider('https://git.convergent.tn/foo/bar'));
+        self::assertSame('forgejo', PluginGitpluginsSource::deriveProvider('https://forgejo.example.org/foo/bar'));
         self::assertSame('gitea', PluginGitpluginsSource::deriveProvider('https://codeberg.org/foo/bar'));
         self::assertSame('unknown', PluginGitpluginsSource::deriveProvider('https://example.com/foo/bar'));
     }

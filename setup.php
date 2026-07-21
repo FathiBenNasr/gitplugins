@@ -70,7 +70,7 @@ function plugin_version_gitplugins(): array
         'version'      => PLUGIN_GITPLUGINS_VERSION,
         'author'       => 'Convergent Cloud Computing',
         'license'      => 'GPL-2.0-or-later',
-        'homepage'     => 'https://git.convergent.tn/fbennasr/gitplugins',
+        'homepage'     => 'https://github.com/FathiBenNasr/gitplugins',
         'requirements' => [
             'glpi' => [
                 'min' => PLUGIN_GITPLUGINS_MIN_GLPI,

@@ -1,41 +1,25 @@
 {
-  "_comment": "Example convergent plugin catalog manifest (Phase 10). Host it on an SSRF-allowlisted https URL and set it as the catalog URL in gitplugins Configuration. Either a bare list or {\"plugins\":[...]} is accepted. Each entry needs a valid plugin_key (a-z0-9_) and an https url; ref_policy ∈ track_branch|latest_tag|pin_tag|pin_sha|release (default latest_tag). Optional per-entry known_issues feed the Phase 7 registry under source 'catalog'. Advisory only — every install still runs the full confirm + preflight.",
+  "_comment": "Example plugin catalog manifest (Phase 10). Host it on an SSRF-allowlisted https URL and set it as the catalog URL in gitplugins Configuration. Either a bare list or {\"plugins\":[...]} is accepted. Each entry needs a valid plugin_key (a-z0-9_) and an https url; ref_policy ∈ track_branch|latest_tag|pin_tag|pin_sha|release (default latest_tag). Optional per-entry known_issues feed the Phase 7 registry under source 'catalog'. Advisory only — every install still runs the full confirm + preflight.",
   "plugins": [
     {
-      "plugin_key": "comm",
-      "name": "Comm",
-      "description": "Internal communications hub for GLPI.",
-      "url": "https://git.convergent.tn/fbennasr/comm",
+      "plugin_key": "example_plugin",
+      "name": "Example Plugin",
+      "description": "A GLPI plugin hosted in a public git repository.",
+      "url": "https://github.com/your-org/example-plugin",
       "ref_policy": "release",
-      "category": "communication"
+      "category": "tools"
     },
     {
-      "plugin_key": "commcenter",
-      "name": "Comm Center",
-      "description": "Operator console for the Comm suite.",
-      "url": "https://git.convergent.tn/fbennasr/commcenter",
-      "ref_policy": "release",
-      "category": "communication"
-    },
-    {
-      "plugin_key": "assetreport",
-      "name": "Asset Report",
-      "description": "High-fidelity PDF asset reports (optional mPDF backend).",
-      "url": "https://git.convergent.tn/fbennasr/assetreport",
+      "plugin_key": "example_pinned",
+      "name": "Example Pinned Plugin",
+      "description": "Same idea, pinned to the latest release tag.",
+      "url": "https://gitlab.com/your-org/example-pinned",
       "ref_policy": "latest_tag",
-      "category": "assets"
-    },
-    {
-      "plugin_key": "assetcve",
-      "name": "Asset CVE",
-      "description": "Correlate installed software against CVE feeds.",
-      "url": "https://git.convergent.tn/fbennasr/assetcve",
-      "ref_policy": "latest_tag",
-      "category": "security",
+      "category": "assets",
       "known_issues": [
         {
           "kind": "advisory",
-          "message": "First sync pulls the full CVE feed; schedule off-peak."
+          "message": "First sync can be heavy; schedule off-peak."
         }
       ]
     }

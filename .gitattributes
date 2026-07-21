@@ -1,0 +1,11 @@
+# Keep release archives (git archive / GitHub source tarballs) free of dev-only
+# files. Screenshots under docs/ are intentionally NOT ignored — the marketplace
+# descriptor references them via raw.githubusercontent.
+/.gitattributes      export-ignore
+/.gitignore          export-ignore
+/.claude            export-ignore
+/CLAUDE.md           export-ignore
+/CODING_PLAN.md      export-ignore
+/tests              export-ignore
+/phpunit.xml         export-ignore
+/docs/ENHANCEMENTS-SPEC.md export-ignore

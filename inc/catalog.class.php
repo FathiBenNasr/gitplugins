@@ -1,9 +1,9 @@
 <?php
 /**
- * Git Plugin Installer — convergent plugin catalog (Phase 10).
+ * Git Plugin Installer — plugin catalog (Phase 10).
  *
- * The biggest force-multiplier: a curated manifest (single JSON hosted on
- * git.convergent.tn, SSRF-allowlisted) listing our suite — key, name,
+ * The biggest force-multiplier: a curated manifest (a single JSON hosted on any
+ * SSRF-allowlisted https URL) listing a set of plugins — key, name,
  * description, repo URL, recommended ref_policy, category, and optional
  * known_issues. gitplugins fetches + caches it; front/catalog.php renders cards
  * whose "Add source" pre-fills the normal create form. ADVISORY ONLY — every

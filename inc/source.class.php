@@ -77,7 +77,7 @@ class PluginGitpluginsSource extends CommonDBTM
         if (str_contains($host, 'gitlab')) {
             return 'gitlab';
         }
-        if (str_contains($host, 'forgejo') || str_contains($host, 'convergent')) {
+        if (str_contains($host, 'forgejo')) {
             return 'forgejo';
         }
         if (str_contains($host, 'gitea') || str_contains($host, 'codeberg')) {

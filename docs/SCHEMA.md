@@ -126,7 +126,7 @@ policy, and download/timeout caps.
 **Relationships.** None (standalone singleton).
 
 **Notable columns.**
-- `allowed_hosts` JSON — host allowlist for the SSRF-guarded fetcher (A10); seeded with GitHub/GitLab + `git.convergent.tn`, top-up-migrated to add release-download hosts.
+- `allowed_hosts` JSON — host allowlist for the SSRF-guarded fetcher (A10); seeded with GitHub (+ its release-download hosts) and GitLab; add self-hosted hosts via Configuration.
 - `allow_auto_install` / `allow_downgrade` — install policy gates.
 - Caps: `max_download_mb` (1..500), `fetch_timeout_seconds` (5..300), `check_frequency_minutes` (5..40320).
 
