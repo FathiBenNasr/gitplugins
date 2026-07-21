@@ -204,7 +204,7 @@ function plugin_gitplugins_install(): bool
         // Conservative default allowlist (A10): only well-known hosts + our own.
         $DB->insert('glpi_plugin_gitplugins_config', [
             'id'            => 1,
-            'allowed_hosts' => json_encode(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com', 'gitlab.com', 'git.convergent.tn']),
+            'allowed_hosts' => json_encode(['github.com', 'api.github.com', 'raw.githubusercontent.com', 'codeload.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com', 'gitlab.com']),
         ]);
     }
 

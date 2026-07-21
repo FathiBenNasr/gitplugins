@@ -6,8 +6,8 @@
 
 A GLPI 11 **meta-plugin** that installs and updates other plugins from a
 **git/HTTPS source** (GitHub, GitLab, Gitea, Forgejo) — for plugins not on the
-official marketplace (private or self-hosted repos, e.g. your own on
-`git.convergent.tn`). It **extends** GLPI's native pipeline rather than replacing
+official marketplace (private or self-hosted repos, e.g. your own Forgejo/Gitea
+instance). It **extends** GLPI's native pipeline rather than replacing
 it: it owns a security-hardened **fetch + extraction** step, then drives GLPI
 core's own **`Plugin::install()/activate()`** seam so managed plugins behave
 exactly like marketplace ones (their own install hooks run).
@@ -137,7 +137,7 @@ Menu: **Setup → Git Plugin Installer**.
 
 | Field | Meaning |
 |-------|---------|
-| **Allowed hosts** (one per line) | SSRF allowlist — the server only fetches from these exact hosts. Empty keeps a safe default set (GitHub + download hosts, GitLab, `git.convergent.tn`). |
+| **Allowed hosts** (one per line) | SSRF allowlist — the server only fetches from these exact hosts. Empty keeps a safe default set (GitHub + its download hosts, GitLab). Add your own self-hosted git host here to use it. |
 | **Max download size (MB)** | Archive download cap (1–500, default 50). |
 | **Fetch timeout (seconds)** | Per-fetch network timeout (5–300, default 30). |
 | **Update-check frequency (minutes)** | Cadence of the update checker (5–40320, default 1440). |
