@@ -17,7 +17,7 @@ Packaging and hygiene release for the public GLPI plugin catalogue. No functiona
 - `LICENSE` now contains the full verbatim GPL-2.0 text (previously a truncated stub with the wrong project name).
 
 ### Packaging
-- Added `.gitattributes` `export-ignore` so release archives exclude `tests/`, `CLAUDE.md`, `CODING_PLAN.md`, `docs/ENHANCEMENTS-SPEC.md` and `phpunit.xml`.
+- Added `.gitattributes` `export-ignore` so release archives exclude `tests/`, `CODING_PLAN.md`, `docs/ENHANCEMENTS-SPEC.md` and `phpunit.xml`.
 - Vendor-neutral example catalog manifest; no internal hosts in shipped files.
 
 ## [1.0.0] - 2026-07-05
