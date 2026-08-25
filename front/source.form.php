@@ -211,7 +211,7 @@ $curType      = (($f['provider'] ?? '') === 'local') ? 'local' : 'git';
       </div>
     </div>
     <div class="mb-3" id="gp-cred-field">
-      <label class="form-label"><?= htmlspecialchars(__('Private-repo token (write-only)', 'gitplugins')) ?></label>
+      <label class="form-label"><?= htmlspecialchars(__('Private-repo token (read-only)', 'gitplugins')) ?></label>
       <input type="password" class="form-control" id="gp-cred" name="credential" autocomplete="new-password" placeholder="<?= $f['credential'] ? htmlspecialchars(__('•••••• (stored — leave blank to keep)', 'gitplugins')) : '' ?>">
 <?php if ($f['credential']): ?>
       <div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="clear_credential" id="cc"><label class="form-check-label" for="cc"><?= htmlspecialchars(__('Remove the stored token', 'gitplugins')) ?></label></div>

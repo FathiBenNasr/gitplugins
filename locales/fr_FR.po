@@ -104,8 +104,8 @@ msgstr "Clé du plugin (nom du répertoire)"
 msgid "Ref (branch / tag / SHA)"
 msgstr "Référence (branche / tag / SHA)"
 
-msgid "Private-repo token (write-only)"
-msgstr "Jeton de dépôt privé (écriture seule)"
+msgid "Private-repo token (read-only)"
+msgstr "Jeton de dépôt privé (lecture seule)"
 
 msgid "•••••• (stored — leave blank to keep)"
 msgstr "•••••• (enregistré — laisser vide pour conserver)"

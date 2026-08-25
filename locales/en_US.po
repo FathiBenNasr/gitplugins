@@ -104,8 +104,8 @@ msgstr "Plugin key (directory name)"
 msgid "Ref (branch / tag / SHA)"
 msgstr "Ref (branch / tag / SHA)"
 
-msgid "Private-repo token (write-only)"
-msgstr "Private-repo token (write-only)"
+msgid "Private-repo token (read-only)"
+msgstr "Private-repo token (read-only)"
 
 msgid "•••••• (stored — leave blank to keep)"
 msgstr "•••••• (stored — leave blank to keep)"
