@@ -54,8 +54,8 @@ final class RefResolverTest extends TestCase
             PluginGitpluginsRefResolver::archiveUrl('gitlab', 'https://gitlab.com/foo/bar', 'main')
         );
         self::assertSame(
-            'https://git.convergent.tn/fbennasr/comm/archive/v0.1.0.tar.gz',
-            PluginGitpluginsRefResolver::archiveUrl('forgejo', 'https://git.convergent.tn/fbennasr/comm', 'v0.1.0')
+            'https://git.convergent.tn/fbennasr/GLPI-comm/archive/v0.1.0.tar.gz',
+            PluginGitpluginsRefResolver::archiveUrl('forgejo', 'https://git.convergent.tn/fbennasr/GLPI-comm', 'v0.1.0')
         );
     }
 

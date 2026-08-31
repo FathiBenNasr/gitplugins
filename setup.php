@@ -13,7 +13,7 @@
  *
  * @license GPL-2.0-or-later
  * @copyright 2026 Convergent Cloud Computing
- * @link https://git.convergent.tn/fbennasr/gitplugins
+ * @link https://git.convergent.tn/fbennasr/GLPI-gitplugins
  */
 
 declare(strict_types=1);

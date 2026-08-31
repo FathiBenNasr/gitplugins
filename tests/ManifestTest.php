@@ -26,12 +26,12 @@ final class ManifestTest extends TestCase
     public function testParsesValidBlock(): void
     {
         $m = PluginGitpluginsManifest::parseXml($this->xml(
-            '<gitupdate><repo>https://git.convergent.tn/fbennasr/comm.git</repo>'
+            '<gitupdate><repo>https://git.convergent.tn/fbennasr/GLPI-comm.git</repo>'
             . '<ref>main</ref><ref_type>branch</ref_type><provider>forgejo</provider>'
             . '<private>false</private></gitupdate>'
         ));
         self::assertIsArray($m);
-        self::assertSame('https://git.convergent.tn/fbennasr/comm.git', $m['repo']);
+        self::assertSame('https://git.convergent.tn/fbennasr/GLPI-comm.git', $m['repo']);
         self::assertSame('main', $m['ref']);
         self::assertSame('branch', $m['ref_type']);
         self::assertSame('forgejo', $m['provider']);
