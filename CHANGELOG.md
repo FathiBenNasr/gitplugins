@@ -5,6 +5,11 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-10-02
+
+### Added
+- **`en_GB` catalogue.** GLPI falls back to `en_GB` when a plugin has no catalogue for the session language; without one, every language load of an `en_GB` session probed the missing file again. `en_GB` is a copy of `en_US`; `tests/CataloguesTest.php` pins that it ships, that every `.po` is compiled, and that all catalogues share their msgids.
+
 ## [1.0.1] - 2026-07-21
 
 Packaging and hygiene release for the public GLPI plugin catalogue. No functional feature changes.
