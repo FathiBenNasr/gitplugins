@@ -581,13 +581,16 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return [];
         }
         try {
-            PluginGitpluginsFetcher::assertSafeUrl($api, $cfg->getAllowedHosts());
-            $client = \Toolbox::getGuzzleClient();
-            $resp   = $client->request('GET', $api, [
-                'headers' => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
-                'timeout' => $cfg->getFetchTimeoutSeconds(),
+            $resp = PluginGitpluginsHttpclient::get($api, [
+                'allowed_hosts' => $cfg->getAllowedHosts(),
+                'headers'       => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
+                'timeout'       => $cfg->getFetchTimeoutSeconds(),
+                'max_bytes'     => 2097152,
             ]);
-            $data = json_decode((string) $resp->getBody(), true);
+            if ($resp['status'] !== 200) {
+                throw new \RuntimeException('fetch_failed');
+            }
+            $data = json_decode($resp['body'], true);
             if (!is_array($data)) {
                 return [];
             }
@@ -620,13 +623,16 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return '';
         }
         try {
-            PluginGitpluginsFetcher::assertSafeUrl($api, $cfg->getAllowedHosts());
-            $client = \Toolbox::getGuzzleClient();
-            $resp   = $client->request('GET', $api, [
-                'headers' => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
-                'timeout' => $cfg->getFetchTimeoutSeconds(),
+            $resp = PluginGitpluginsHttpclient::get($api, [
+                'allowed_hosts' => $cfg->getAllowedHosts(),
+                'headers'       => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
+                'timeout'       => $cfg->getFetchTimeoutSeconds(),
+                'max_bytes'     => 2097152,
             ]);
-            $data = json_decode((string) $resp->getBody(), true);
+            if ($resp['status'] !== 200) {
+                throw new \RuntimeException('fetch_failed');
+            }
+            $data = json_decode($resp['body'], true);
 
             return is_array($data) ? PluginGitpluginsRefResolver::branchSha($data) : '';
         } catch (\Throwable $e) {

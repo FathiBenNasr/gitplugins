@@ -4,8 +4,8 @@
  *
  * The server fetches admin-supplied URLs, so this is the plugin's highest-risk
  * surface. The guard (assertSafeUrl / isBlockedIp) is PURE and exhaustively
- * unit-tested (tests/SsrfGuardTest); the actual download (fetch) reuses GLPI's
- * proxy-aware Guzzle client and is exercised only on the live box.
+ * unit-tested (tests/SsrfGuardTest); the actual download goes through
+ * PluginGitpluginsHttpclient (ext-curl, proxy-aware, per-hop guard — tests/HttpclientTest).
  *
  * Defence in depth (A10): HTTPS only · host allowlist · resolve DNS and BLOCK
  * private / loopback / link-local (incl. 169.254.169.254 metadata) / ULA /
@@ -78,8 +78,8 @@ final class PluginGitpluginsFetcher
 
     /**
      * Validate a URL against the SSRF policy and return the resolved peer IPs to
-     * pin (mitigating DNS-rebinding — the live fetch pins these via Guzzle's
-     * resolve/connect options). Throws \RuntimeException with a GENERIC message
+     * pin (mitigating DNS-rebinding — PluginGitpluginsHttpclient pins them with
+     * CURLOPT_RESOLVE). Throws \RuntimeException with a GENERIC message
      * on any violation (no enumeration signal, no internal detail to the user).
      *
      * @param  string[]  $allowedHosts  exact host allowlist (lower-case)
@@ -217,8 +217,8 @@ final class PluginGitpluginsFetcher
     }
 
     /**
-     * Download the archive at $url to a unique temp file. Reuses GLPI's
-     * proxy-aware Guzzle client (free $CFG_GLPI['proxy_*'] + GLPIKey compliance),
+     * Download the archive at $url to a unique temp file through the plugin's
+     * proxy-aware curl client ($CFG_GLPI['proxy_*'] + GLPIKey compliance),
      * enforces timeout + size cap, sends any credential as a Bearer header (never
      * in the URL/query, never logged), and re-validates the URL on EVERY redirect.
      *
@@ -236,9 +236,8 @@ final class PluginGitpluginsFetcher
         int $maxBytes = 52428800,
         int $timeout = 30
     ): string {
-        // Guard before any network touch; pin the resolved peer IPs.
-        $ips    = self::assertSafeUrl($url, $allowedHosts);
-        $host   = strtolower((string) parse_url($url, PHP_URL_HOST));
+        // Guard before touching disk; the client re-checks and pins every hop.
+        self::assertSafeUrl($url, $allowedHosts);
         $tmpDir = defined('GLPI_TMP_DIR') ? GLPI_TMP_DIR : sys_get_temp_dir();
         $dest   = $tmpDir . '/gitplugins_' . bin2hex(random_bytes(8)) . '.tar.gz';
 
@@ -247,39 +246,24 @@ final class PluginGitpluginsFetcher
             $headers['Authorization'] = 'Bearer ' . $token; // never logged
         }
 
-        $client  = \Toolbox::getGuzzleClient();
-        $written = 0;
-        $sink    = fopen($dest, 'wb');
+        $sink = fopen($dest, 'wb');
         if ($sink === false) {
             throw new \RuntimeException('fetch_failed');
         }
 
         try {
-            $client->request('GET', $url, [
+            // Every redirect hop is re-validated and IP-pinned by the client.
+            $resp = PluginGitpluginsHttpclient::get($url, [
+                'allowed_hosts'   => $allowedHosts,
                 'headers'         => $headers,
                 'connect_timeout' => min($timeout, 30),
                 'timeout'         => $timeout,
-                'allow_redirects' => [
-                    'max'             => 5,
-                    'strict'          => true,
-                    'referer'         => false,
-                    'protocols'       => ['https'],
-                    // Re-validate every redirect target against the SSRF policy.
-                    'on_redirect'     => static function ($request, $response, $uri) use ($allowedHosts): void {
-                        self::assertSafeUrl((string) $uri, $allowedHosts);
-                    },
-                ],
-                // Pin the first resolved IP for the apex host (DNS-rebinding
-                // mitigation); redirects to other allowed hosts re-resolve safely.
-                'curl'            => [CURLOPT_RESOLVE => [$host . ':443:' . $ips[0]]],
+                'max_bytes'       => $maxBytes,
                 'sink'            => $sink,
-                'progress'        => static function ($dlTotal, $dlNow) use (&$written, $maxBytes): void {
-                    $written = (int) $dlNow;
-                    if ($dlTotal > $maxBytes || $dlNow > $maxBytes) {
-                        throw new \RuntimeException('too_large');
-                    }
-                },
             ]);
+            if ($resp['status'] !== 200) {
+                throw new \RuntimeException('fetch_failed');
+            }
         } catch (\Throwable $e) {
             if (is_resource($sink)) {
                 fclose($sink);
@@ -302,7 +286,7 @@ final class PluginGitpluginsFetcher
 
     /**
      * Fetch a small text resource (a plugin.xml manifest) into memory, reusing
-     * the SAME SSRF guard (assertSafeUrl), proxy-aware Guzzle client, redirect
+     * the SAME SSRF guard (assertSafeUrl), proxy-aware curl client, redirect
      * re-validation, timeout and size cap as fetch(). Used by Detect-from-URL —
      * the ONE place an outbound call is made on user input, behind the right +
      * allowlist. Returns the body string, or throws a GENERIC RuntimeException.
@@ -322,47 +306,26 @@ final class PluginGitpluginsFetcher
         int $maxBytes = 524288,
         int $timeout = 15
     ): string {
-        // Guard before any network touch; pin the resolved peer IP (rebinding).
-        $ips  = self::assertSafeUrl($url, $allowedHosts);
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-
         $headers = ['User-Agent' => 'GLPI-gitplugins'];
         if ($token !== '') {
             $headers['Authorization'] = 'Bearer ' . $token; // never logged
         }
 
-        $client = \Toolbox::getGuzzleClient();
         try {
-            $resp = $client->request('GET', $url, [
+            // Guard + IP pin on every hop, hard byte cap while streaming.
+            $resp = PluginGitpluginsHttpclient::get($url, [
+                'allowed_hosts'   => $allowedHosts,
                 'headers'         => $headers,
                 'connect_timeout' => min($timeout, 30),
                 'timeout'         => $timeout,
-                'allow_redirects' => [
-                    'max'         => 5,
-                    'strict'      => true,
-                    'referer'     => false,
-                    'protocols'   => ['https'],
-                    'on_redirect' => static function ($request, $response, $uri) use ($allowedHosts): void {
-                        self::assertSafeUrl((string) $uri, $allowedHosts);
-                    },
-                ],
-                'curl'            => [CURLOPT_RESOLVE => [$host . ':443:' . $ips[0]]],
-                // Hard byte cap: read at most $maxBytes from the stream.
-                'stream'          => true,
+                'max_bytes'       => $maxBytes,
             ]);
         } catch (\Throwable $e) {
             throw new \RuntimeException('fetch_failed');
         }
 
-        if ($resp->getStatusCode() !== 200) {
-            throw new \RuntimeException('fetch_failed');
-        }
-        $body = $resp->getBody();
-        $out  = '';
-        while (!$body->eof() && strlen($out) <= $maxBytes) {
-            $out .= $body->read(8192);
-        }
-        if ($out === '' || strlen($out) > $maxBytes) {
+        $out = $resp['body'];
+        if ($resp['status'] !== 200 || $out === '') {
             throw new \RuntimeException('fetch_failed');
         }
 

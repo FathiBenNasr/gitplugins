@@ -21,7 +21,7 @@ declare(strict_types=1);
 use Glpi\Plugin\Hooks;
 
 define('PLUGIN_GITPLUGINS_VERSION', '1.0.2');
-// GLPI 11 only — uses the namespaced plugin API + Toolbox::getGuzzleClient().
+// GLPI 11 only — uses the namespaced plugin API; outbound HTTP via ext-curl (inc/httpclient.class.php).
 define('PLUGIN_GITPLUGINS_MIN_GLPI', '11.0.0');
 define('PLUGIN_GITPLUGINS_MAX_GLPI', '11.99.99');
 
@@ -29,7 +29,7 @@ define('PLUGIN_GITPLUGINS_MAX_GLPI', '11.99.99');
 // correct whether the plugin lives under /plugins/ or /marketplace/.
 // (Do NOT use $_SERVER['PHP_SELF'] in forms — GLPI 11's front controller is
 // public/index.php and PHP_SELF misroutes POSTs.)
-define('PLUGIN_GITPLUGINS_ROOTDOC', Plugin::getWebDir('gitplugins'));
+define('PLUGIN_GITPLUGINS_ROOTDOC', ($GLOBALS['CFG_GLPI']['root_doc'] ?? '') . '/plugins/gitplugins');
 
 /**
  * Plugin init — kept cheap (runs on every request). Heavy work (network fetch,
@@ -39,7 +39,6 @@ function plugin_init_gitplugins(): void
 {
     global $PLUGIN_HOOKS;
 
-    $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['gitplugins'] = true;
 
     // Admin menu entry under Setup — highest-privilege capability (installs
     // remote code), so the menu only shows to holders of our right.

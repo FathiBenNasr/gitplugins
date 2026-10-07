@@ -19,7 +19,7 @@ include('../../../inc/includes.php');
 
 Session::checkLoginUser();
 if (!Session::haveRight('plugin_gitplugins', READ)) {
-    Html::displayRightError();
+    throw new \Glpi\Exception\Http\AccessDeniedHttpException();
     exit;
 }
 

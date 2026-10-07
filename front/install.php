@@ -18,7 +18,7 @@ include('../../../inc/includes.php');
 
 Session::checkLoginUser();
 if (!Session::haveRight('plugin_gitplugins', READ)) {
-    Html::displayRightError();
+    throw new \Glpi\Exception\Http\AccessDeniedHttpException();
     exit;
 }
 
@@ -30,7 +30,7 @@ $src  = new PluginGitpluginsSource();
 $id   = (int) ($_GET['id'] ?? $_POST['id'] ?? 0);
 
 if ($id <= 0 || !$src->getFromDB($id) || !$src->canViewItem()) {
-    Html::displayRightError();
+    throw new \Glpi\Exception\Http\AccessDeniedHttpException();
     exit;
 }
 $source = $src->fields;
