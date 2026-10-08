@@ -46,7 +46,7 @@ final class PluginGitpluginsLog
         ]);
 
         if (class_exists('Event')) {
-            Event::log(
+            \Glpi\Event::log(
                 (int) ($sourceId ?? 0),
                 'gitplugins',
                 4,

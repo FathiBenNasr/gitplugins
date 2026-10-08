@@ -13,8 +13,6 @@
 
 declare(strict_types=1);
 
-include('../../../inc/includes.php');
-
 header('Content-Type: application/json; charset=utf-8');
 
 Session::checkLoginUser();

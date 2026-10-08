@@ -18,8 +18,6 @@
 
 declare(strict_types=1);
 
-include('../../../inc/includes.php');
-
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 

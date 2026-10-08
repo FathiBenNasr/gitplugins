@@ -14,8 +14,6 @@
 
 declare(strict_types=1);
 
-include('../../../inc/includes.php');
-
 Session::checkLoginUser();
 if (!Session::haveRight('plugin_gitplugins', UPDATE)) {
     throw new \Glpi\Exception\Http\AccessDeniedHttpException();

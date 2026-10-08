@@ -13,8 +13,6 @@
 
 declare(strict_types=1);
 
-include('../../../inc/includes.php');
-
 Session::checkLoginUser();
 Session::checkRight('plugin_gitplugins', UPDATE);
 

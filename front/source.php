@@ -8,8 +8,6 @@
 
 declare(strict_types=1);
 
-include('../../../inc/includes.php');
-
 Session::checkLoginUser();
 if (!Session::haveRight('plugin_gitplugins', READ)) {
     throw new \Glpi\Exception\Http\AccessDeniedHttpException();
