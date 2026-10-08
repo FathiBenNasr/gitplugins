@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2026-10-08
 
 ### Fixed
+- Fresh install: the `hook_warnings` column comment interpolated an undefined `$PLUGIN_HOOKS` (warning on install, comment cut short). Guarded by `tests/HookDdlTest.php`.
 - GLPI 12 readiness, still compatible with GLPI 11: `Glpi\Event::log()` instead of the global `Event` alias (dropped in GLPI 12), and no `inc/includes.php` in web entry points (useless since GLPI 11, deprecated in GLPI 12).
 
 ## [1.0.2] - 2026-10-02
