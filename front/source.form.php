@@ -2,8 +2,7 @@
 /**
  * Git Plugin Installer — source editor + CRUD handler.
  *
- * CSRF validated framework-side (GLPI 11 CheckCsrfListener); the hidden
- * _glpi_csrf_token field is what it checks. No manual checkCSRF() (lesson #3).
+ * CSRF is validated framework-side by GLPI 12 (Sec-Fetch-Site/Origin headers, no token).
  * The credential is write-only (never echoed), GLPIKey-encrypted, never logged.
  *
  * @license GPL-2.0-or-later
@@ -145,7 +144,6 @@ if (!$isEdit) {
 }
 
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/source.form.php', 'config', 'PluginGitpluginsSource');
-$csrf   = Session::getNewCSRFToken();
 $action = htmlspecialchars($root . '/front/source.form.php');
 $policies = [
     'latest_tag'   => __('Latest release tag', 'gitplugins'),
@@ -160,7 +158,6 @@ $curType      = (($f['provider'] ?? '') === 'local') ? 'local' : 'git';
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-8">
 <form method="post" action="<?= $action ?>" class="card mt-3">
-  <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
   <input type="hidden" name="id" value="<?= (int) $id ?>">
   <div class="card-header"><h3 class="card-title mb-0"><?= htmlspecialchars($isEdit ? __('Edit source', 'gitplugins') : __('New source', 'gitplugins')) ?></h3></div>
   <div class="card-body">
@@ -235,7 +232,6 @@ $curType      = (($f['provider'] ?? '') === 'local') ? 'local' : 'git';
 // translatable text is hard-coded in JS and nothing is interpolated unescaped).
 $gpDetect = [
     'url'        => $root . '/ajax/detect.php',
-    'csrf'       => $csrf,
     'detect'     => __('Detect', 'gitplugins'),
     'detecting'  => __('Detecting…', 'gitplugins'),
     'filled'     => __('Detected and pre-filled the fields below. Review, then Save.', 'gitplugins'),
@@ -303,17 +299,14 @@ $gpDetect = [
     body.set('ref', ref);
     if (cred !== '') { body.set('credential', cred); }
 
-    // Send as a real AJAX request so GLPI 11 validates the CSRF token from the
-    // X-Glpi-Csrf-Token header and PRESERVES it (preserve_token). Putting the
-    // token in the body instead made GLPI treat this as a normal POST and
-    // CONSUME the form's single-use token, breaking the subsequent Save.
+    // Same-origin AJAX request: GLPI 12 checks CSRF from the browser's
+    // Sec-Fetch-Site/Origin headers, no token is involved.
     fetch(GP.url, {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-Glpi-Csrf-Token': GP.csrf
+        'X-Requested-With': 'XMLHttpRequest'
       },
       body: body.toString()
     }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'generic' }; }); })

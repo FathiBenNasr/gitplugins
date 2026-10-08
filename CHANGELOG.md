@@ -5,6 +5,13 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-08
+
+### Changed
+- **Requires GLPI 12.0** (min 12.0.0, max 12.99.99); the 11.x line stays on the previous minor.
+- Class properties inherited from GLPI carry the native types GLPI 12 declares (`public static string $rightname`, …): an untyped redeclaration is a compile error that takes the whole GLPI instance down.
+- CSRF: no more `_glpi_csrf_token` fields, `Session::getNewCSRFToken()`/`checkCSRF()` calls or `X-Glpi-Csrf-Token` headers. GLPI 12 validates the browser's `Sec-Fetch-Site`/`Origin` headers instead.
+
 ## [1.0.3] - 2026-10-08
 
 ### Fixed

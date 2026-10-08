@@ -84,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/targets.php', 'config', 'PluginGitpluginsSource');
 
 $canUpdate = Session::haveRight('plugin_gitplugins', UPDATE);
-$csrf      = Session::getNewCSRFToken();
 $rows      = [];
 foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'name ASC']) as $r) {
     $rows[] = $r;
@@ -114,7 +113,6 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'n
         <td class="text-end">
 <?php if ($canUpdate): ?>
           <form method="post" action="<?= htmlspecialchars($root . '/front/targets.php') ?>" class="d-inline" onsubmit="return confirm('<?= htmlspecialchars(__('Remove this target?', 'gitplugins')) ?>');">
-            <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars(Session::getNewCSRFToken()) ?>">
             <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
             <button type="submit" name="delete" class="btn btn-sm btn-outline-danger"><i class="ti ti-trash"></i></button>
           </form>
@@ -129,7 +127,6 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'n
   </table>
 <?php if ($canUpdate): ?>
   <form method="post" action="<?= htmlspecialchars($root . '/front/targets.php') ?>" class="card">
-    <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
     <input type="hidden" name="id" value="0">
     <div class="card-header"><h3 class="card-title mb-0"><?= htmlspecialchars(__('Add a target', 'gitplugins')) ?></h3></div>
     <div class="card-body">

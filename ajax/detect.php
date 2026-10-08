@@ -10,8 +10,7 @@
  * This is the ONE place gitplugins makes an outbound call on user-supplied input,
  * so it is fenced hard (A01/A10):
  *   - POST only; Session::checkLoginUser() + the plugin_gitplugins right;
- *   - GLPI 11's CheckCsrfListener auto-validates the hidden _glpi_csrf_token
- *     (no manual checkCSRF — lesson #3);
+ *   - GLPI 12 rejects a cross-site POST framework-side (Sec-Fetch-Site/Origin);
  *   - the URL passes the SAME host-allowlist + SSRF validation as a real install
  *     (assertSafeUrl) before any fetch;
  *   - the credential is used as a bearer header only, never echoed back;

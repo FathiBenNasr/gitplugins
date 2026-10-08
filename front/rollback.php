@@ -5,7 +5,7 @@
  * Restores a retained pre-update snapshot (files + owned tables) for a managed
  * plugin, then re-registers + verifies it. Highest-privilege action (it swaps
  * live plugin code), so it requires plugin_gitplugins UPDATE. CSRF is validated
- * framework-side (GLPI 11 listener) via the hidden token — no manual checkCSRF.
+ * framework-side by GLPI 12 (Sec-Fetch-Site/Origin headers, no token).
  *
  * @license GPL-2.0-or-later
  * @copyright 2026 Convergent Cloud Computing

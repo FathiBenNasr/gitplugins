@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 class PluginGitpluginsSource extends CommonDBTM
 {
-    public static $rightname = 'plugin_gitplugins';
+    public static string $rightname = 'plugin_gitplugins';
 
     /** Localised type name (singular/plural) for GLPI UI labels. */
     public static function getTypeName($nb = 0): string

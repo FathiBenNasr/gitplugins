@@ -79,11 +79,9 @@ $installed = PluginGitpluginsInstaller::installedVersion((string) $source['plugi
 $resolved  = PluginGitpluginsUpdatecheck::resolveLatest($source, PluginGitpluginsConfig::singleton());
 
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php', 'config', 'PluginGitpluginsSource');
-$csrf = Session::getNewCSRFToken();
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-7">
 <form method="post" action="<?= htmlspecialchars($root . '/front/install.php') ?>" class="card mt-3">
-  <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
   <input type="hidden" name="id" value="<?= (int) $id ?>">
   <div class="card-header"><h3 class="card-title mb-0"><?= htmlspecialchars(__('Confirm install / update', 'gitplugins')) ?></h3></div>
   <div class="card-body">

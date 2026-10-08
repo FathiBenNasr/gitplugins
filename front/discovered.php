@@ -137,7 +137,6 @@ foreach ($discovered as $d) {
 }
 
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/discovered.php', 'config', 'PluginGitpluginsSource');
-$csrf   = Session::getNewCSRFToken();
 $action = htmlspecialchars($root . '/front/discovered.php');
 $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
 ?>
@@ -199,7 +198,6 @@ $any = false; foreach ($discovered as $d): $any = true;
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.form.php?id=' . (int) $d['managed_source_id']) ?>"><?= htmlspecialchars(__('Edit source', 'gitplugins')) ?></a>
 <?php elseif ($canUpd && $d['state'] === 'declared'): ?>
           <form method="post" action="<?= $action ?>" class="d-inline">
-            <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
             <input type="hidden" name="plugin_key" value="<?= htmlspecialchars($d['key']) ?>">
             <button type="submit" name="register" class="btn btn-sm btn-primary"><?= htmlspecialchars(__('Register as managed source', 'gitplugins')) ?></button>
           </form>

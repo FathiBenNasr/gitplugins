@@ -26,8 +26,6 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/plan.php', '
 $plan       = PluginGitpluginsPlanner::plan();
 $canUpdate  = Session::haveRight('plugin_gitplugins', UPDATE);
 $selectable = PluginGitpluginsPlanner::selectableKeys($plan);
-$csrf       = Session::getNewCSRFToken();
-
 $badge = static function (string $action): string {
     return [
         'update'            => 'bg-info',
@@ -44,7 +42,6 @@ $badge = static function (string $action): string {
   <div class="alert alert-info"><?= htmlspecialchars(__('No managed sources yet.', 'gitplugins')) ?></div>
 <?php else: ?>
 <form method="post" action="<?= htmlspecialchars($root . '/front/bulk.php') ?>">
-  <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
   <table class="table table-hover card-table">
     <thead><tr>
       <th style="width:2.5rem"><?php if ($canUpdate && $selectable !== []): ?><input type="checkbox" id="gp-all" title="<?= htmlspecialchars(__('Select all applicable', 'gitplugins')) ?>"><?php endif; ?></th>

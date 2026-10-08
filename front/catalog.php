@@ -42,8 +42,6 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/catalog.php'
 $entries   = PluginGitpluginsCatalog::cached();
 $canUpdate = Session::haveRight('plugin_gitplugins', UPDATE);
 $hasUrl    = PluginGitpluginsConfig::singleton()->getCatalogUrls() !== [];
-$csrf      = Session::getNewCSRFToken();
-
 // Which catalog keys are already registered as sources (to badge "managed").
 $managed = [];
 foreach ($DB->request(['SELECT' => ['plugin_key'], 'FROM' => 'glpi_plugin_gitplugins_sources']) as $r) {
@@ -55,7 +53,6 @@ foreach ($DB->request(['SELECT' => ['plugin_key'], 'FROM' => 'glpi_plugin_gitplu
     <h2 class="mb-0"><?= htmlspecialchars(__('Plugin catalog', 'gitplugins')) ?></h2>
 <?php if ($canUpdate && $hasUrl): ?>
     <form method="post" action="<?= htmlspecialchars($root . '/front/catalog.php') ?>">
-      <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
       <button type="submit" name="refresh" value="1" class="btn btn-outline-primary"><i class="ti ti-refresh"></i> <?= htmlspecialchars(__('Refresh catalog', 'gitplugins')) ?></button>
     </form>
 <?php endif; ?>
