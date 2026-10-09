@@ -4,6 +4,15 @@
 [![GLPI](https://img.shields.io/badge/GLPI-%3E%3D%2011.0-orange)](https://glpi-project.org)
 [![PHP](https://img.shields.io/badge/PHP-%3E%3D%208.2-purple)](https://www.php.net/)
 
+![Installed plugins and their git-source state](docs/captures/02-installed.png)
+
+![Managed plugin status: installed vs available, health](docs/captures/04-status.png)
+
+![Configuration: SSRF host allowlist, download caps, auto-install off by default](docs/captures/05-config.png)
+
+All screenshots, and the command that regenerates them on the browser bench:
+[docs/captures/](docs/captures/README.md).
+
 A GLPI 11 **meta-plugin** that installs and updates other plugins from a
 **git/HTTPS source** (GitHub, GitLab, Gitea, Forgejo) — for plugins not on the
 official marketplace (private or self-hosted repos, e.g. your own Forgejo/Gitea
