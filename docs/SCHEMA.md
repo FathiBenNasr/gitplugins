@@ -108,6 +108,7 @@ available from the source, plus the action queued for the cron worker.
 - `pending_action` ENUM `none|install|update` — queued action the cron worker applies (indexed).
 - `last_result` ENUM `none|ok|error|pending` — outcome of the most recent attempt; `last_error` generic (no secrets).
 - `installed_version`/`installed_sha` vs `available_version`/`available_sha`; timestamps `last_check_at`, `last_install_at`.
+- `pending_ref` / `pending_sha` (1.0.4) — the ref and commit the admin confirmed for the queued job; the cron fetches exactly that commit (never a later branch head) and records it as `installed_sha`.
 
 ### `glpi_plugin_gitplugins_logs`
 **Role.** Audit log of fetch/install/update actions — generic messages, never
@@ -118,6 +119,16 @@ secrets.
 - `users_id` → `glpi_users.id` (N:1, the actor, NULL for cron) [core].
 
 **Notable columns.** `action`, `ref`, `sha`, `result` ENUM `ok|error`, `message` (generic, no credentials).
+
+**Retention (1.0.4).** Rows older than 365 days are purged by the `checkUpdates`
+cron (they name the acting user). On uninstall the table is **kept** under
+`glpi_plugin_gitplugins_logs_archived_<YmdHis>` instead of being dropped, so the
+audit trail outlives the plugin. Every audited line also goes to GLPI's event log.
+
+### `glpi_plugin_gitplugins_deploy_nonces` (1.0.4)
+**Role.** Anti-replay store of the signed deploy-manifest pulls: each
+`X-Gp-Nonce` is accepted once per target (`UNIQUE (plugin_gitplugins_targets_id, nonce)`);
+rows older than twice the ±300 s freshness window are purged on each pull.
 
 ### `glpi_plugin_gitplugins_config`
 **Role.** Single-row (id=1) plugin configuration — SSRF host allowlist, install

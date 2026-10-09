@@ -61,6 +61,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
     // Secret: only (re)write when a non-empty value is submitted; never echo.
     $secret = (string) ($_POST['secret'] ?? '');
+    // WHY: the pull endpoint is reachable without a session, so the shared
+    // secret is the whole access control; a short one can be brute-forced
+    // offline from a single captured signed request.
+    if ($secret !== '' && !PluginGitpluginsDeploy::isStrongSecret($secret)) {
+        Session::addMessageAfterRedirect(
+            sprintf(__('The shared secret must be at least %d characters long.', 'gitplugins'), PluginGitpluginsDeploy::MIN_SECRET_LENGTH),
+            false,
+            ERROR
+        );
+        Html::redirect($root . '/front/targets.php');
+    }
     if ($secret !== '') {
         $data['secret'] = PluginGitpluginsSource::encryptCredential($secret);
     }
@@ -113,7 +124,7 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'n
         <td><?= htmlspecialchars((string) ($r['last_pull_at'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
         <td class="text-end">
 <?php if ($canUpdate): ?>
-          <form method="post" action="<?= htmlspecialchars($root . '/front/targets.php') ?>" class="d-inline" onsubmit="return confirm('<?= htmlspecialchars(__('Remove this target?', 'gitplugins')) ?>');">
+          <form method="post" action="<?= htmlspecialchars($root . '/front/targets.php') ?>" class="d-inline" onsubmit="<?= PluginGitpluginsUi::confirmAttr(__('Remove this target?', 'gitplugins')) ?>">
             <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars(Session::getNewCSRFToken()) ?>">
             <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
             <button type="submit" name="delete" class="btn btn-sm btn-outline-danger"><i class="ti ti-trash"></i></button>
@@ -136,16 +147,16 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'n
       <div class="row">
         <div class="col-md-4 mb-3">
           <label class="form-label"><?= htmlspecialchars(__('Name', 'gitplugins')) ?></label>
-          <input type="text" class="form-control" name="name" maxlength="64" required pattern="[A-Za-z0-9_.-]+" placeholder="prod-servicedesk">
+          <input type="text" class="form-control" name="name" maxlength="64" required pattern="[A-Za-z0-9_.-]+" placeholder="prod-glpi">
         </div>
         <div class="col-md-8 mb-3">
           <label class="form-label"><?= htmlspecialchars(__('Base URL (informational)', 'gitplugins')) ?></label>
-          <input type="url" class="form-control" name="base_url" maxlength="255" placeholder="https://servicedesk.example.tn">
+          <input type="url" class="form-control" name="base_url" maxlength="255" placeholder="https://glpi.example.org">
         </div>
       </div>
       <div class="mb-3">
         <label class="form-label"><?= htmlspecialchars(__('Shared secret (write-only)', 'gitplugins')) ?></label>
-        <input type="password" class="form-control" name="secret" autocomplete="new-password" required>
+        <input type="password" class="form-control" name="secret" autocomplete="new-password" minlength="32" required>
         <div class="form-text"><?= htmlspecialchars(__('The HMAC key the target signs its pull requests with. Encrypted with GLPI\'s key, never logged or displayed. Use a long random string and configure the identical value on the target.', 'gitplugins')) ?></div>
       </div>
       <div class="form-check form-switch mb-2">

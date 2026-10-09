@@ -35,6 +35,40 @@ final class SsrfGuardTest extends TestCase
         }
     }
 
+    /** L-1: special-purpose ranges PHP's filter flags let through are blocked too. */
+    public function testSpecialPurposeRangesBlocked(): void
+    {
+        foreach ([
+            '100.64.0.1', '100.127.255.254',   // CGNAT (shared address space)
+            '198.18.0.1', '198.19.255.1',      // benchmarking
+            '192.0.0.8', '192.0.2.10',         // IETF protocol assignments, TEST-NET-1
+            '198.51.100.7', '203.0.113.9',     // TEST-NET-2/3
+            '192.88.99.1',                     // 6to4 relay anycast
+            '224.0.0.1', '239.255.255.250',    // multicast
+            '255.255.255.255',                 // broadcast
+            '64:ff9b::7f00:1', '64:ff9b::a00:1', '64:ff9b:1::a00:1', // NAT64 → loopback / RFC 1918
+            '::7f00:1', '::127.0.0.1',         // IPv4-compatible
+            '2002:7f00:1::', '2002:a00:1::1',  // 6to4 embedding 127/8 and 10/8
+            '2001::1', '2001:0:4136:e378::1',  // Teredo
+            '2001:db8::1',                     // documentation
+            '100::1',                          // discard-only
+            'fec0::1',                         // deprecated site-local
+            'ff02::1',                         // IPv6 multicast
+        ] as $ip) {
+            self::assertTrue(PluginGitpluginsFetcher::isBlockedIp($ip), "expected blocked: {$ip}");
+        }
+    }
+
+    public function testCidrMatcherBoundaries(): void
+    {
+        self::assertTrue(PluginGitpluginsFetcher::ipInCidr('100.64.0.0', '100.64.0.0/10'));
+        self::assertTrue(PluginGitpluginsFetcher::ipInCidr('100.127.255.255', '100.64.0.0/10'));
+        self::assertFalse(PluginGitpluginsFetcher::ipInCidr('100.128.0.0', '100.64.0.0/10'));
+        self::assertFalse(PluginGitpluginsFetcher::ipInCidr('100.63.255.255', '100.64.0.0/10'));
+        self::assertFalse(PluginGitpluginsFetcher::ipInCidr('::1', '10.0.0.0/8'), 'families never mix');
+        self::assertFalse(PluginGitpluginsFetcher::ipInCidr('10.0.0.1', 'garbage'));
+    }
+
     public function testPublicIpsPass(): void
     {
         foreach (['8.8.8.8', '1.1.1.1', '140.82.121.3', '2606:4700:4700::1111'] as $ip) {

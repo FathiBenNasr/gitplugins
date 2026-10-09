@@ -148,4 +148,11 @@ final class UpdateDecisionTest extends TestCase
             self::assertFalse(str_starts_with($line, 'Bcc:'));
         }
     }
+
+    public function testApiHeadersCarryTheRepoTokenOnlyWhenSet(): void
+    {
+        self::assertFalse(isset(PluginGitpluginsUpdatecheck::apiHeaders('')['Authorization']));
+        self::assertSame('Bearer tok', PluginGitpluginsUpdatecheck::apiHeaders('tok')['Authorization']);
+        self::assertSame('application/json', PluginGitpluginsUpdatecheck::apiHeaders('tok')['Accept']);
+    }
 }

@@ -103,7 +103,7 @@ foreach ($sources as $s) {
         <td class="text-end">
           <a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $sid) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a>
 <?php $snaps = PluginGitpluginsRollback::rowsFor((string) $s['plugin_key']); if ($snaps): ?>
-          <form method="post" action="<?= htmlspecialchars($root . '/front/rollback.php') ?>" class="d-inline-flex gap-1 align-items-center ms-1" onsubmit="return confirm('<?= htmlspecialchars(__('Roll back this plugin to the selected snapshot? Live plugin code and its tables are replaced.', 'gitplugins')) ?>');">
+          <form method="post" action="<?= htmlspecialchars($root . '/front/rollback.php') ?>" class="d-inline-flex gap-1 align-items-center ms-1" onsubmit="<?= PluginGitpluginsUi::confirmAttr(__('Roll back this plugin to the selected snapshot? Live plugin code and its tables are replaced.', 'gitplugins')) ?>">
             <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars(Session::getNewCSRFToken()) ?>">
             <select name="snapshot_id" class="form-select form-select-sm" style="width:auto">
 <?php foreach ($snaps as $snap): ?>

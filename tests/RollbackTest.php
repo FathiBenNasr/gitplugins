@@ -43,6 +43,20 @@ final class RollbackTest extends TestCase
         self::assertSame([5], PluginGitpluginsRollback::idsToPrune(self::rows(5), -4));
     }
 
+    /** M-15: a file still referenced by another retained snapshot is never unlinked. */
+    public function testPathsToUnlinkKeepsSharedFiles(): void
+    {
+        $old   = ['files_archive_path' => '/b/foo-1.zip', 'db_dump_path' => '/d/gitplugins-snap-foo.sql.gz'];
+        $newer = [['files_archive_path' => '/b/foo-2.zip', 'db_dump_path' => '/d/gitplugins-snap-foo.sql.gz']];
+        self::assertSame(['/b/foo-1.zip'], PluginGitpluginsRollback::pathsToUnlink($old, $newer));
+        // Own, unshared files both go; empty paths are ignored.
+        self::assertSame(
+            ['/b/foo-1.zip', '/d/a.sql.gz'],
+            PluginGitpluginsRollback::pathsToUnlink(['files_archive_path' => '/b/foo-1.zip', 'db_dump_path' => '/d/a.sql.gz'], $newer)
+        );
+        self::assertSame([], PluginGitpluginsRollback::pathsToUnlink(['files_archive_path' => '', 'db_dump_path' => null], []));
+    }
+
     public function testDropsZeroIds(): void
     {
         // A row with a bad/missing id must never surface as a prune target.

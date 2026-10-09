@@ -21,9 +21,49 @@ declare(strict_types=1);
 final class PluginGitpluginsFetcher
 {
     /**
+     * Special-purpose ranges no plugin download may reach (IANA IPv4/IPv6
+     * special-purpose registries). WHY an explicit list: PHP's
+     * FILTER_FLAG_NO_PRIV_RANGE|NO_RES_RANGE let CGNAT (100.64/10), benchmarking
+     * (198.18/15), IETF (192.0.0/24), multicast and every IPv6 transition
+     * prefix that embeds an IPv4 address (NAT64 64:ff9b::/96, 6to4 2002::/16,
+     * Teredo 2001::/32, IPv4-compatible ::/96) through — the last ones tunnel
+     * straight to loopback or RFC 1918 targets.
+     */
+    public const DENY_CIDRS = [
+        '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16',
+        '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16',
+        '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4',
+        '::/96', '::ffff:0:0/96', '64:ff9b::/96', '64:ff9b:1::/48', '100::/64',
+        '2001::/23', '2001:db8::/32', '2002::/16', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8',
+    ];
+
+    /** PURE: is the IP literal $ip inside the CIDR block $cidr (same family)? */
+    public static function ipInCidr(string $ip, string $cidr): bool
+    {
+        [$net, $len] = array_pad(explode('/', $cidr, 2), 2, '');
+        $ipBin  = @inet_pton($ip);
+        $netBin = @inet_pton($net);
+        if ($ipBin === false || $netBin === false || strlen($ipBin) !== strlen($netBin) || !ctype_digit($len)) {
+            return false;
+        }
+        $bits = (int) $len;
+        $full = intdiv($bits, 8);
+        if (strncmp($ipBin, $netBin, $full) !== 0) {
+            return false;
+        }
+        $rest = $bits % 8;
+        if ($rest === 0) {
+            return true;
+        }
+        $mask = (0xFF << (8 - $rest)) & 0xFF;
+
+        return (ord($ipBin[$full]) & $mask) === (ord($netBin[$full]) & $mask);
+    }
+
+    /**
      * Decide whether a resolved IP literal sits in a blocked range. Pure +
-     * fully tabled-tested (the SSRF backbone). Covers IPv4 private/loopback/
-     * link-local + IPv6 loopback/link-local/ULA + IPv4-mapped-IPv6.
+     * fully tabled-tested (the SSRF backbone). Covers every DENY_CIDRS block,
+     * plus PHP's private/reserved filters as a second opinion.
      */
     public static function isBlockedIp(string $ip): bool
     {
@@ -31,6 +71,11 @@ final class PluginGitpluginsFetcher
         if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP) === false) {
             // Not a valid literal → treat as blocked (fail closed).
             return true;
+        }
+        foreach (self::DENY_CIDRS as $cidr) {
+            if (self::ipInCidr($ip, $cidr)) {
+                return true;
+            }
         }
 
         // Unwrap an IPv4-mapped IPv6 address (::ffff:169.254.169.254) and

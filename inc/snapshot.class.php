@@ -29,22 +29,136 @@ final class PluginGitpluginsSnapshot
      * @param string[] $allTables
      * @return string[]
      */
-    public static function ownedTables(array $allTables, string $key): array
+    public static function ownedTables(array $allTables, string $key, array $otherKeys = []): array
     {
         if (!preg_match('/^[a-z0-9_]+$/', $key)) {
             return [];
         }
         $exact  = 'glpi_plugin_' . $key;
         $prefix = $exact . '_';
-        $out    = [];
+        // WHY: `glpi_plugin_foo_` is also the prefix of a sibling plugin `foo_x`'s
+        // tables. A table that belongs to a longer installed key is that plugin's,
+        // never ours — snapshotting/restoring it would overwrite a sibling's data.
+        $siblingPrefixes = [];
+        foreach ($otherKeys as $other) {
+            $other = (string) $other;
+            if ($other !== $key && str_starts_with($other, $key . '_') && preg_match('/^[a-z0-9_]+$/', $other)) {
+                $siblingPrefixes[] = 'glpi_plugin_' . $other;
+            }
+        }
+        $out = [];
         foreach ($allTables as $t) {
             $t = (string) $t;
-            if ($t === $exact || strncmp($t, $prefix, strlen($prefix)) === 0) {
-                $out[$t] = $t;
+            if ($t !== $exact && strncmp($t, $prefix, strlen($prefix)) !== 0) {
+                continue;
+            }
+            foreach ($siblingPrefixes as $sp) {
+                if ($t === $sp || str_starts_with($t, $sp . '_')) {
+                    continue 2;
+                }
+            }
+            $out[$t] = $t;
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * PURE: is every statement of a dump confined to the plugin's own tables?
+     * Only the exact statement shapes dumpTable() writes are accepted — a
+     * `DROP TABLE IF EXISTS`, `CREATE TABLE` or `INSERT INTO` naming one of
+     * $owned, plus the FOREIGN_KEY_CHECKS toggles. Anything else (a write to a
+     * core table, a GRANT, a second statement on the same line…) refuses the
+     * whole file.
+     *
+     * @param string[] $statements as split by splitStatements()
+     * @param string[] $owned      the tables restore() may touch
+     */
+    public static function statementsAreOwned(array $statements, array $owned): bool
+    {
+        if ($statements === []) {
+            return false;
+        }
+        $names = [];
+        foreach ($owned as $t) {
+            if (preg_match('/^[a-z0-9_]+$/', (string) $t)) {
+                $names[] = preg_quote((string) $t, '/');
+            }
+        }
+        if ($names === []) {
+            return false;
+        }
+        $tables = '`(?:' . implode('|', $names) . ')`';
+        $shape  = '/^(?:SET FOREIGN_KEY_CHECKS=[01]'
+            . '|DROP TABLE IF EXISTS ' . $tables
+            . '|CREATE TABLE ' . $tables . ' \\(.*'
+            . '|INSERT INTO ' . $tables . ' \\(.*)$/sD';
+        foreach ($statements as $stmt) {
+            $stmt = (string) $stmt;
+            // A `;` outside a quoted value means a second statement was smuggled
+            // onto the same line: dumpTable() never writes one there.
+            if (preg_match($shape, $stmt) !== 1 || self::hasUnquotedSemicolon($stmt)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** PURE: does $stmt contain a `;` outside a single-quoted SQL string? */
+    private static function hasUnquotedSemicolon(string $stmt): bool
+    {
+        $inQuote = false;
+        $len     = strlen($stmt);
+        for ($i = 0; $i < $len; $i++) {
+            $c = $stmt[$i];
+            if ($inQuote) {
+                if ($c === '\\') {
+                    $i++; // escaped char inside a quoted value
+                } elseif ($c === "'") {
+                    $inQuote = false;
+                }
+            } elseif ($c === "'") {
+                $inQuote = true;
+            } elseif ($c === ';') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * PURE: table names that appear in DROP/CREATE/INSERT statements, so a table
+     * the dump recreates (dropped by a failed migration) is still recognised as
+     * owned when it no longer exists in the live schema.
+     *
+     * @param string[] $statements
+     * @return string[]
+     */
+    public static function tablesNamedIn(array $statements): array
+    {
+        $out = [];
+        foreach ($statements as $stmt) {
+            if (preg_match('/^(?:DROP TABLE IF EXISTS|CREATE TABLE|INSERT INTO) `([a-z0-9_]+)`/', (string) $stmt, $m) === 1) {
+                $out[$m[1]] = $m[1];
             }
         }
 
         return array_values($out);
+    }
+
+    /**
+     * PURE: is $realPath a file directly inside $realDir? Both are expected to be
+     * realpath()-resolved by the caller (so a symlink cannot point outside).
+     */
+    public static function isInsideDir(string $realPath, string $realDir): bool
+    {
+        if ($realPath === '' || $realDir === '' || $realDir === '/') {
+            return false;
+        }
+
+        return dirname($realPath) === rtrim($realDir, '/');
     }
 
     /**
@@ -87,11 +201,7 @@ final class PluginGitpluginsSnapshot
         if (!preg_match('/^[a-z0-9_]+$/', $key)) {
             return null;
         }
-        $tables = [];
-        foreach ($DB->listTables() as $row) {
-            $tables[] = is_array($row) ? reset($row) : (string) $row;
-        }
-        $owned = self::ownedTables($tables, $key);
+        $owned = self::ownedTables(self::allTables(), $key, self::installedKeys());
         if ($owned === []) {
             return null;
         }
@@ -105,7 +215,7 @@ final class PluginGitpluginsSnapshot
         if ($dir === '' || !@is_dir($dir)) {
             return null;
         }
-        $path = $dir . '/' . self::dumpFilename($key);
+        $path = $dir . '/' . self::dumpFilename($key, date('YmdHis'), bin2hex(random_bytes(6)));
         $gz   = @gzopen($path, 'wb9');
         if ($gz === false) {
             return null;
@@ -133,19 +243,35 @@ final class PluginGitpluginsSnapshot
 
     /**
      * Restore a snapshot produced by dumpOwnedTables (live-box). Best-effort;
-     * returns true when every statement applied. Only the target plugin's own
-     * tables can be present in the dump (produced scoped), so this cannot touch
-     * core or sibling data.
+     * returns true when every statement applied.
+     *
+     * WHY the checks below: the dump path comes from a DB row and the file sits
+     * on disk, so "it was produced scoped" is an assumption, not a guarantee.
+     * Executing every statement of an arbitrary file would be an arbitrary-SQL
+     * primitive. We enforce instead: the file is one of $key's snapshot files
+     * directly inside GLPI's dump dir, and every statement only touches $key's
+     * own tables — otherwise nothing at all is executed.
      */
-    public static function restore(string $gzPath): bool
+    public static function restore(string $gzPath, string $key): bool
     {
         /** @var DBmysql $DB */
         global $DB;
 
-        if (!is_file($gzPath)) {
+        if (!preg_match('/^[a-z0-9_]+$/', $key) || !is_file($gzPath)) {
             return false;
         }
-        $sql = '';
+        $real = realpath($gzPath);
+        $dir  = realpath(self::dumpDir());
+        // Accept this plugin's per-snapshot files, and the single shared name
+        // used before 1.0.4 (still guarded statement by statement below).
+        $base   = basename($real === false ? '' : $real);
+        $legacy = rtrim(self::dumpPrefix($key), '-') . '.sql.gz';
+        if ($real === false || $dir === false || !self::isInsideDir($real, $dir)
+            || !(str_starts_with($base, self::dumpPrefix($key)) || $base === $legacy)) {
+            return false;
+        }
+        $gzPath = $real;
+        $sql    = '';
         $gz  = @gzopen($gzPath, 'rb');
         if ($gz === false) {
             return false;
@@ -157,8 +283,17 @@ final class PluginGitpluginsSnapshot
         if ($sql === '') {
             return false;
         }
+        $statements = self::splitStatements($sql);
+        $owned      = self::ownedTables(
+            array_merge(self::allTables(), self::tablesNamedIn($statements)),
+            $key,
+            self::installedKeys()
+        );
+        if (!self::statementsAreOwned($statements, $owned)) {
+            return false;
+        }
         $ok = true;
-        foreach (self::splitStatements($sql) as $stmt) {
+        foreach ($statements as $stmt) {
             try {
                 $DB->doQuery($stmt);
             } catch (\Throwable $e) {
@@ -189,10 +324,56 @@ final class PluginGitpluginsSnapshot
         return $out;
     }
 
-    /** Snapshot filename (dot-collapsed, no separators). */
-    private static function dumpFilename(string $key): string
+    /**
+     * PURE: snapshot filename — one file PER snapshot. WHY: retained snapshot
+     * rows each point at their own dump; a per-plugin name let each new version
+     * overwrite the previous dump (a rollback to N-2 restored N-1's schema) and
+     * let prune() unlink the dump the newest snapshot still needed.
+     */
+    public static function dumpFilename(string $key, string $stamp, string $rand): string
     {
-        return 'gitplugins-snap-' . preg_replace('/[^a-z0-9_]+/', '_', strtolower($key)) . '.sql.gz';
+        $s = preg_replace('/[^0-9]+/', '', $stamp) ?? '';
+        $r = preg_replace('/[^a-f0-9]+/', '', strtolower($rand)) ?? '';
+
+        return self::dumpPrefix($key) . ($s !== '' ? $s : '0') . '-' . ($r !== '' ? $r : '0') . '.sql.gz';
+    }
+
+    /** PURE: the filename prefix shared by every snapshot of one plugin. */
+    public static function dumpPrefix(string $key): string
+    {
+        return 'gitplugins-snap-' . (preg_replace('/[^a-z0-9_]+/', '_', strtolower($key)) ?? 'plugin') . '-';
+    }
+
+    /** Live: every table name of the GLPI database. */
+    private static function allTables(): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $tables = [];
+        foreach ($DB->listTables() as $row) {
+            $tables[] = is_array($row) ? (string) reset($row) : (string) $row;
+        }
+
+        return $tables;
+    }
+
+    /** Live: plugin keys known to GLPI (READ glpi_plugins), for the sibling-prefix rule. */
+    private static function installedKeys(): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $keys = [];
+        try {
+            foreach ($DB->request(['SELECT' => ['directory'], 'FROM' => 'glpi_plugins']) as $r) {
+                $keys[] = (string) ($r['directory'] ?? '');
+            }
+        } catch (\Throwable $e) {
+            // best-effort: without the list we simply cannot exclude siblings
+        }
+
+        return $keys;
     }
 
     /** GLPI dump dir (outside the web tree), or '' when unknown. */

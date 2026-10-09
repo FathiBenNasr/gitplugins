@@ -60,7 +60,9 @@ function plugin_gitplugins_install(): bool
                 `available_sha`       VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Commit SHA of the available ref, when known',
                 `update_available`    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'Cached flag: 1 when the available version/SHA differs from the installed one (drives the UI badge, no fetch at render)',
                 `pending_action`      ENUM('none','install','update') NOT NULL DEFAULT 'none' COMMENT 'Queued action for the cron worker to apply',
-                `last_result`         ENUM('none','ok','error','pending') NOT NULL DEFAULT 'none' COMMENT 'Outcome of the most recent install/update attempt',
+                `pending_ref`         VARCHAR(255) NULL DEFAULT NULL COMMENT 'Ref confirmed by the admin for the queued job (the cron fetches exactly this)',
+                `pending_sha`         VARCHAR(64)  NULL DEFAULT NULL COMMENT 'Commit SHA confirmed by the admin for the queued job, when known',
+                `last_result`        ENUM('none','ok','error','pending') NOT NULL DEFAULT 'none' COMMENT 'Outcome of the most recent install/update attempt',
                 `last_error`          VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic last error message (no secrets)',
                 `last_check_at`       DATETIME     NULL DEFAULT NULL COMMENT 'When the source was last checked for updates',
                 `last_install_at`     DATETIME     NULL DEFAULT NULL COMMENT 'When an install/update last succeeded',
@@ -155,6 +157,22 @@ function plugin_gitplugins_install(): bool
         );
     }
 
+    // ---- deploy_nonces: one-time nonces of signed pull requests (replay guard) ----
+    // Created on fresh installs and on 1.0.4 reinstalls alike (tableExists guard).
+    if (!$DB->tableExists('glpi_plugin_gitplugins_deploy_nonces')) {
+        $DB->doQuery(
+            "CREATE TABLE `glpi_plugin_gitplugins_deploy_nonces` (
+                `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',
+                `plugin_gitplugins_targets_id` INT UNSIGNED NOT NULL COMMENT 'Target that signed the request',
+                `nonce`         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'One-time request nonce (X-Gp-Nonce), accepted once per target',
+                `date_creation` DATETIME     NULL DEFAULT NULL COMMENT 'When the nonce was first seen; rows older than twice the replay window are purged',
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uniq_target_nonce` (`plugin_gitplugins_targets_id`, `nonce`),
+                KEY `idx_date` (`date_creation`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} COMMENT='Nonces of signed deploy-manifest pulls already accepted (anti-replay)'"
+        );
+    }
+
     // ---- catalog: cached convergent plugin catalog (Phase 10) ----
     if (!$DB->tableExists('glpi_plugin_gitplugins_catalog')) {
         $DB->doQuery(
@@ -228,13 +246,7 @@ function plugin_gitplugins_install(): bool
         'WHERE'   => ['name' => 'config', 'rights' => ['&', UPDATE]],
         'GROUPBY' => 'profiles_id',
     ]);
-    foreach ($profiles as $row) {
-        $DB->updateOrInsert(
-            'glpi_profilerights',
-            ['rights' => ALLSTANDARDRIGHT],
-            ['profiles_id' => (int) $row['profiles_id'], 'name' => 'plugin_gitplugins']
-        );
-    }
+    plugin_gitplugins_grant_rights($DB, $profiles);
 
     CronTask::Register(
         'PluginGitpluginsUpdatecheck',
@@ -301,6 +313,8 @@ function plugin_gitplugins_migrate(DBmysql $DB): void
             'health'            => "ADD COLUMN `health` ENUM('ok','warn','fail','unknown') NOT NULL DEFAULT 'unknown' COMMENT 'Post-install self-check verdict from the target plugin (prerequisites/config), beyond mere activation'",
             'health_detail'     => "ADD COLUMN `health_detail` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Generic detail for a non-ok health verdict (no secrets)'",
             'hook_warnings'     => "ADD COLUMN `hook_warnings` JSON NULL DEFAULT NULL COMMENT 'Cached JSON list of post-install \$PLUGIN_HOOKS collisions with other active plugins (Phase 6 badge)'",
+            'pending_ref'       => "ADD COLUMN `pending_ref` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Ref confirmed by the admin for the queued job (the cron fetches exactly this)'",
+            'pending_sha'       => "ADD COLUMN `pending_sha` VARCHAR(64) NULL DEFAULT NULL COMMENT 'Commit SHA confirmed by the admin for the queued job, when known'",
         ];
         foreach ($cols as $col => $ddl) {
             if (!$DB->fieldExists($inst, $col)) {
@@ -447,7 +461,13 @@ function plugin_gitplugins_uninstall(): bool
 
     CronTask::Unregister('gitplugins');
 
-    $DB->doQuery("DELETE FROM `glpi_profilerights` WHERE `name` = 'plugin_gitplugins'");
+    // Through the core API rather than raw SQL on a core table.
+    ProfileRight::deleteProfileRights(['plugin_gitplugins']);
+
+    // WHY: audit evidence must outlive the feature it audits — uninstalling the
+    // installer must not erase the record of what it installed and who asked.
+    // The log table is kept under a dated name instead of being dropped.
+    plugin_gitplugins_archive_logs($DB, date('YmdHis'));
 
     // Best-effort: remove retained rollback snapshot files (inert out-of-web-tree
     // backups + DB dumps) before dropping the table that indexes them, so nothing
@@ -457,7 +477,7 @@ function plugin_gitplugins_uninstall(): bool
     }
 
     foreach ([
-        'glpi_plugin_gitplugins_logs',
+        'glpi_plugin_gitplugins_deploy_nonces',
         'glpi_plugin_gitplugins_snapshots',
         'glpi_plugin_gitplugins_known_issues',
         'glpi_plugin_gitplugins_catalog',
@@ -472,4 +492,49 @@ function plugin_gitplugins_uninstall(): bool
     }
 
     return true;
+}
+
+/**
+ * Keep the audit table under a dated archive name on uninstall (see
+ * plugin_gitplugins_uninstall). Idempotent: nothing happens when there is no
+ * log table, or when that archive name is already taken.
+ */
+function plugin_gitplugins_archive_logs(DBmysql $DB, string $stamp): void
+{
+    $logs    = 'glpi_plugin_gitplugins_logs';
+    $archive = $logs . '_archived_' . preg_replace('/[^0-9]/', '', $stamp);
+    if ($DB->tableExists($logs) && !$DB->tableExists($archive)) {
+        $DB->doQuery('RENAME TABLE ' . $DB->quoteName($logs) . ' TO ' . $DB->quoteName($archive));
+    }
+}
+
+/**
+ * Grant plugin_gitplugins (ALLSTANDARDRIGHT) to the given profiles — the ones
+ * holding config write access, selected by the install hook.
+ *
+ * @param iterable<array{profiles_id:int|string}> $profiles
+ */
+function plugin_gitplugins_grant_rights(DBmysql $DB, iterable $profiles): void
+{
+    // WHY first grant only: this hook runs again on every version bump, and
+    // granting each time silently reverted an administrator who took the right
+    // away from a profile. A profile that already has a row for our right (any
+    // value, 0 included) is left as it is; the rows go only on uninstall, so a
+    // real reinstall starts from the default again. Per-profile updateOrInsert
+    // stays the write path (GLPI pitfall #2).
+    foreach ($profiles as $row) {
+        $pid = (int) $row['profiles_id'];
+        if ($DB->request([
+            'FROM'  => 'glpi_profilerights',
+            'WHERE' => ['profiles_id' => $pid, 'name' => 'plugin_gitplugins'],
+            'LIMIT' => 1,
+        ])->current() !== null) {
+            continue;
+        }
+        $DB->updateOrInsert(
+            'glpi_profilerights',
+            ['rights' => ALLSTANDARDRIGHT],
+            ['profiles_id' => $pid, 'name' => 'plugin_gitplugins']
+        );
+    }
 }

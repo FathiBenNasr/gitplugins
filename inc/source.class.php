@@ -16,6 +16,179 @@ class PluginGitpluginsSource extends CommonDBTM
 {
     public static $rightname = 'plugin_gitplugins';
 
+    /**
+     * WHY: the GLPIKey-encrypted repo token must never leave the server, not
+     * even encrypted, through the REST API or any generic item export.
+     */
+    public static $undisclosedFields = ['credential'];
+
+    /** Ref policies a source may use. */
+    public const REF_POLICIES = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha', 'release'];
+
+    /**
+     * PURE: validate and normalise a source as submitted (form, REST API,
+     * massive action…) — the ONE place the business rules live, so a write
+     * that bypasses front/source.form.php cannot bypass them (L-27).
+     *
+     * $in keys: name, url, plugin_key, ref_policy, ref, is_active (bool-ish),
+     * source_type ('git'|'local'). Returns the errors (empty = valid) and the
+     * normalised columns (name, url, host, provider, plugin_key, ref_policy,
+     * ref, is_active).
+     *
+     * @param array<string,mixed>    $in
+     * @param string[]               $allowedHosts   SSRF host allowlist
+     * @param string[]               $localRoots     allowed roots for local sources
+     * @param callable(string): bool $isMarketplace  is this key managed by GLPI's marketplace?
+     * @return array{errors: string[], data: array<string,mixed>}
+     */
+    public static function validateInput(
+        array $in,
+        array $allowedHosts,
+        bool $allowLocal,
+        array $localRoots,
+        callable $isMarketplace
+    ): array {
+        $errors  = [];
+        $isLocal = (string) ($in['source_type'] ?? 'git') === 'local' && $allowLocal;
+        $key     = strtolower(preg_replace('/[^a-z0-9_]/i', '', (string) ($in['plugin_key'] ?? '')) ?? '');
+        $policy  = (string) ($in['ref_policy'] ?? 'latest_tag');
+        $ref     = trim((string) ($in['ref'] ?? ''));
+
+        if ($isLocal) {
+            // LOCAL source (Phase 1): no HTTPS/host/ref checks — the "URL" is an
+            // absolute filesystem path that MUST sit under the configured allowlist.
+            $url    = str_replace(["\r", "\n", "\0"], '', trim((string) ($in['url'] ?? '')));
+            $host   = '';
+            $policy = 'latest_tag';
+            $ref    = '';
+            if (!PluginGitpluginsLocalsource::pathAllowed($url, $localRoots)) {
+                $errors[] = __('The local path must be an absolute path under an allowed root (see Configuration).', 'gitplugins');
+            }
+        } else {
+            $url = self::normaliseUrl((string) ($in['url'] ?? ''));
+            if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || self::hostOf($url) === '') {
+                $errors[] = __('The repository URL must be an https:// URL.', 'gitplugins');
+            }
+            if (!in_array($policy, self::REF_POLICIES, true)) {
+                $policy = 'latest_tag';
+            }
+            // latest_tag and release resolve a ref themselves; pinned policies need one.
+            $refOptional = in_array($policy, ['latest_tag', 'release'], true);
+            if (!$refOptional && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
+                $errors[] = __('A valid ref (branch, tag or commit SHA) is required for this policy.', 'gitplugins');
+            }
+            if ($policy === 'release' && $ref !== '' && !PluginGitpluginsRefResolver::isValidRef($ref)) {
+                $errors[] = __('The release tag is not a valid ref.', 'gitplugins');
+            }
+            // Host allowlist enforcement at save time (A10 defence in depth).
+            $host = self::hostOf($url);
+            if ($host !== '' && !in_array($host, array_map('strtolower', $allowedHosts), true)) {
+                $errors[] = sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host);
+            }
+        }
+
+        if ($key === '') {
+            $errors[] = __('A plugin key (lowercase letters, digits, underscore) is required.', 'gitplugins');
+        } elseif ($isMarketplace($key)) {
+            // WHY (L-15): GLPI loads the marketplace copy first; a second copy
+            // under plugins/ would never run while being reported as applied —
+            // and would fight GLPI's own marketplace updater.
+            $errors[] = __('This plugin is managed by the GLPI marketplace; update it from the marketplace.', 'gitplugins');
+        }
+
+        $name = mb_substr(str_replace(["\r", "\n", "\0"], '', trim((string) ($in['name'] ?? ''))), 0, 255);
+
+        return [
+            'errors' => $errors,
+            'data'   => [
+                'name'       => $name !== '' ? $name : $key,
+                'url'        => mb_substr($url, 0, 255),
+                'host'       => mb_substr($host, 0, 255),
+                'provider'   => $isLocal ? 'local' : self::deriveProvider($url),
+                'plugin_key' => mb_substr($key, 0, 64),
+                'ref_policy' => $policy,
+                'ref'        => $ref !== '' ? mb_substr($ref, 0, 255) : null,
+                'is_active'  => !empty($in['is_active']) ? 1 : 0,
+            ],
+        ];
+    }
+
+    /** Model-level guard for every creation path (form, API, massive action). */
+    public function prepareInputForAdd($input)
+    {
+        return $this->guardInput(is_array($input) ? $input : [], []);
+    }
+
+    /** Model-level guard for every modification path (form, API, massive action). */
+    public function prepareInputForUpdate($input)
+    {
+        return $this->guardInput(is_array($input) ? $input : [], is_array($this->fields) ? $this->fields : []);
+    }
+
+    /**
+     * Apply validateInput() to the merged row and the column rules that the form
+     * used to apply alone. Returns the cleaned input, or false (with the
+     * reasons queued for display) when the row would be invalid.
+     *
+     * @param array<string,mixed> $input
+     * @param array<string,mixed> $current the stored row ([] on creation)
+     * @return array<string,mixed>|false
+     */
+    private function guardInput(array $input, array $current)
+    {
+        // WHY: build_on_install runs third-party build code (composer/npm) and
+        // no screen offers it; it must not be switched on through the API.
+        unset($input['build_on_install']);
+
+        $ruled = ['name', 'url', 'host', 'provider', 'plugin_key', 'ref_policy', 'ref', 'source_type'];
+        if ($current === [] || array_intersect_key($input, array_flip($ruled)) !== []) {
+            $merged = array_merge($current, $input);
+            if (!isset($input['source_type'])) {
+                $merged['source_type'] = (string) ($current['provider'] ?? '') === 'local' ? 'local' : 'git';
+            }
+            if (!array_key_exists('is_active', $input)) {
+                $merged['is_active'] = (int) ($current['is_active'] ?? 1);
+            }
+            $cfg     = PluginGitpluginsConfig::singleton();
+            $checked = self::validateInput(
+                $merged,
+                $cfg->getAllowedHosts(),
+                $cfg->allowLocalSources(),
+                $cfg->getLocalSourceRoots(),
+                static fn (string $k): bool => PluginGitpluginsDiscovery::isMarketplacePlugin($k)
+            );
+            if ($checked['errors'] !== []) {
+                foreach ($checked['errors'] as $e) {
+                    Session::addMessageAfterRedirect(htmlspecialchars($e, ENT_QUOTES), false, ERROR);
+                }
+
+                return false;
+            }
+            $input = array_merge($input, $checked['data']);
+        }
+        unset($input['source_type']);
+        if (array_key_exists('is_active', $input)) {
+            $input['is_active'] = !empty($input['is_active']) ? 1 : 0;
+        }
+
+        // Credential: plaintext in, GLPIKey ciphertext stored — on every path.
+        // Empty keeps the stored one; `_clear_credential` removes it.
+        if (array_key_exists('credential', $input)) {
+            $plain = trim((string) $input['credential']);
+            if ($plain === '') {
+                unset($input['credential']);
+            } else {
+                $input['credential'] = self::encryptCredential($plain);
+            }
+        }
+        if (!empty($input['_clear_credential'])) {
+            $input['credential'] = null;
+        }
+        unset($input['_clear_credential']);
+
+        return $input;
+    }
+
     /** Localised type name (singular/plural) for GLPI UI labels. */
     public static function getTypeName($nb = 0): string
     {

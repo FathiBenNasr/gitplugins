@@ -241,6 +241,19 @@ final class PluginGitpluginsConfig
     }
 
     /**
+     * PURE: the stored form of the catalog URL list — validated URLs joined by
+     * newlines, or null. WHY no length cut: the column is TEXT; cutting at 255
+     * characters stored half a URL whenever several catalogs were listed. The
+     * list itself is bounded by PluginGitpluginsCatalog::MAX_URLS.
+     */
+    public static function catalogUrlColumn(string $raw): ?string
+    {
+        $joined = implode("\n", PluginGitpluginsCatalog::parseUrlList($raw));
+
+        return $joined !== '' ? $joined : null;
+    }
+
+    /**
      * Validate + persist config fields from the config form. Named saveFields()
      * (NOT update()) to avoid any CommonDBTM clash.
      */
@@ -271,8 +284,7 @@ final class PluginGitpluginsConfig
 
         // Catalog manifest URLs (Phase 10): one or more https URLs (one per line).
         // Vendor-neutral — validated + de-duplicated; the SSRF host-allowlist is
-        // enforced at fetch time. Stored newline-joined; blank when none valid.
-        $catalogUrl = implode("\n", PluginGitpluginsCatalog::parseUrlList((string) ($post['catalog_url'] ?? '')));
+        // enforced at fetch time. Stored newline-joined (catalogUrlColumn).
 
         // Local-source roots (one absolute path per line). Only absolute,
         // NUL/CRLF-free paths are kept; anything else is dropped (fail closed).
@@ -297,7 +309,7 @@ final class PluginGitpluginsConfig
             'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),
             'rollback_keep'          => max(0, min(50, (int) ($post['rollback_keep'] ?? 3))),
             'health_fail_action'     => (($post['health_fail_action'] ?? 'flag') === 'rollback') ? 'rollback' : 'flag',
-            'catalog_url'            => $catalogUrl !== '' ? mb_substr($catalogUrl, 0, 255) : null,
+            'catalog_url'            => self::catalogUrlColumn((string) ($post['catalog_url'] ?? '')),
         ];
         $DB->update('glpi_plugin_gitplugins_config', $data, ['id' => 1]);
         self::$instance = null;

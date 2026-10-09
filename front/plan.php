@@ -82,7 +82,7 @@ $badge = static function (string $action): string {
   </table>
 <?php if ($canUpdate && $selectable !== []): ?>
   <div class="d-flex gap-2">
-    <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue the selected plugins for update?', 'gitplugins')) ?>');"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars(__('Update selected', 'gitplugins')) ?></button>
+    <button type="submit" class="btn btn-primary" onclick="<?= PluginGitpluginsUi::confirmAttr(__('Queue the selected plugins for update?', 'gitplugins')) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars(__('Update selected', 'gitplugins')) ?></button>
     <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/status.php') ?>"><?= htmlspecialchars(__('Back to status', 'gitplugins')) ?></a>
   </div>
 <?php else: ?>

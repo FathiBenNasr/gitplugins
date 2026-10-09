@@ -39,4 +39,14 @@ final class VersionTest extends TestCase
         self::assertSame('1.10.0', PluginGitpluginsVersion::highest(['1.2.0', '1.10.0', '1.9.0']));
         self::assertNull(PluginGitpluginsVersion::highest([]));
     }
+
+    public function testHighestPrefersStableOverPreRelease(): void
+    {
+        self::assertSame('v1.2.0', PluginGitpluginsVersion::highest(['v1.2.0', 'v1.3.0-rc1', 'v2.0.0-beta.2', 'v1.1.0']));
+        self::assertSame('1.4.0', PluginGitpluginsVersion::highest(['1.4.0', '1.5.0RC1', '1.5.0dev']));
+        // Nothing stable yet: the highest pre-release is still offered.
+        self::assertSame('2.0.0-rc2', PluginGitpluginsVersion::highest(['2.0.0-rc1', '2.0.0-rc2']));
+        self::assertTrue(PluginGitpluginsVersion::isPreRelease('v1.0.0-alpha'));
+        self::assertFalse(PluginGitpluginsVersion::isPreRelease('v1.0.0'));
+    }
 }

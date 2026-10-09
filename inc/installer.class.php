@@ -50,6 +50,37 @@ final class PluginGitpluginsInstaller
     }
 
     /**
+     * PURE: does what the cron is about to fetch still match what the admin
+     * reviewed on the confirm screen? An empty confirmed SHA (tag / release
+     * policies, where the SHA is not shown) only binds the ref.
+     *
+     * @param array{ref?:string,sha?:string} $resolved
+     */
+    public static function confirmMatches(string $confirmedRef, string $confirmedSha, array $resolved): bool
+    {
+        if (trim($confirmedRef) !== trim((string) ($resolved['ref'] ?? ''))) {
+            return false;
+        }
+        $confirmedSha = strtolower(trim($confirmedSha));
+
+        return $confirmedSha === '' || $confirmedSha === strtolower(trim((string) ($resolved['sha'] ?? '')));
+    }
+
+    /**
+     * PURE: the version a plugin's setup.php declares
+     * (`define('PLUGIN_<KEY>_VERSION', 'x.y.z')`), or '' when absent. Used to
+     * re-run the downgrade guard on what was ACTUALLY downloaded.
+     */
+    public static function versionFromSetup(string $php): string
+    {
+        if (preg_match('/define\(\s*[\'"]PLUGIN_[A-Z0-9_]+_VERSION[\'"]\s*,\s*[\'"]([^\'"]{1,64})[\'"]\s*\)/', $php, $m) === 1) {
+            return trim($m[1]);
+        }
+
+        return '';
+    }
+
+    /**
      * Resolve the archive URL for a source row at its resolved ref. Returns
      * [url, ref] or null. Pure (delegates to RefResolver).
      *
@@ -84,6 +115,13 @@ final class PluginGitpluginsInstaller
 
         if (!preg_match('/^[a-z0-9_]+$/', $key)) {
             self::fail($sourceId, $key, 'invalid_plugin_key');
+
+            return false;
+        }
+        // WHY: GLPI loads a marketplace copy before plugins/, so a second copy
+        // placed here would never run while being reported as applied.
+        if (PluginGitpluginsDiscovery::isMarketplacePlugin($key)) {
+            self::fail($sourceId, $key, 'marketplace_managed');
 
             return false;
         }
@@ -165,6 +203,17 @@ final class PluginGitpluginsInstaller
             }
             $pluginsBase = self::pluginsDir();
 
+            // Downgrade guard on the DOWNLOADED tree (A04). WHY: the confirm
+            // screen compared versions resolved before the fetch; a release
+            // asset or a moved tag can carry an older plugin. Re-decide on the
+            // version the staged setup.php really declares.
+            $stagedPhp     = @file_get_contents($staged . '/setup.php');
+            $stagedVersion = is_string($stagedPhp) ? self::versionFromSetup($stagedPhp) : '';
+            if ($priorVersion !== '' && $stagedVersion !== ''
+                && self::decideAction($priorVersion, $stagedVersion, $cfg->allowDowngrade()) === 'blocked_downgrade') {
+                throw new \RuntimeException('blocked_downgrade');
+            }
+
             // R6 preflight gate: refuse to place a plugin this box can't run
             // (GLPI/PHP version out of range, or a required PHP extension
             // missing) — otherwise it half-installs, deactivates and 404s. Runs
@@ -222,7 +271,7 @@ final class PluginGitpluginsInstaller
                     // Restore the schema too (R8) BEFORE re-registering, so the
                     // restored code meets the version of the DB it expects.
                     if (is_string($dbSnapshot)) {
-                        PluginGitpluginsSnapshot::restore($dbSnapshot);
+                        PluginGitpluginsSnapshot::restore($dbSnapshot, $key);
                     }
                     self::nativeInstall($key); // re-register the restored version
                     @unlink($backupZip);
@@ -244,7 +293,7 @@ final class PluginGitpluginsInstaller
                 && is_string($backupZip)
                 && PluginGitpluginsBackup::restore($backupZip, $pluginsBase, $key)) {
                 if (is_string($dbSnapshot)) {
-                    PluginGitpluginsSnapshot::restore($dbSnapshot);
+                    PluginGitpluginsSnapshot::restore($dbSnapshot, $key);
                 }
                 self::nativeInstall($key);
                 @unlink($backupZip);
@@ -308,6 +357,8 @@ final class PluginGitpluginsInstaller
                 'available_sha'                => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
                 'update_available'             => 0,
                 'pending_action'               => 'none',
+                'pending_ref'                  => null,
+                'pending_sha'                  => null,
                 'last_result'                  => 'ok',
                 'last_error'                   => null,
                 'last_install_at'              => date('Y-m-d H:i:s'),
@@ -469,6 +520,8 @@ final class PluginGitpluginsInstaller
             'plugin_key'                   => $key,
             'plugin_gitplugins_sources_id' => $sourceId,
             'pending_action'               => 'none',
+            'pending_ref'                  => null,
+            'pending_sha'                  => null,
             'last_result'                  => 'error',
             'last_error'                   => mb_substr($reason, 0, 255),
         ], ['plugin_key' => $key]);

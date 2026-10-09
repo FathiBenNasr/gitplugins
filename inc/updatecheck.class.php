@@ -65,14 +65,17 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
                 $DB->update('glpi_plugin_gitplugins_installs', ['pending_action' => 'none'], ['plugin_key' => $key]);
                 continue;
             }
-            $resolved = self::resolveLatest($src->fields, $cfg);
-            $ref      = (string) ($resolved['ref'] ?? ($src->fields['ref'] ?? ''));
-            if ($ref === '' && (string) ($src->fields['ref_policy'] ?? '') !== 'release') {
+            // A job confirmed on install.php carries the reviewed ref/SHA: install
+            // exactly that. Only legacy rows queued without a pin re-resolve.
+            $policy   = (string) ($src->fields['ref_policy'] ?? 'latest_tag');
+            $resolved = self::hasPin($row) ? [] : self::resolveLatest($src->fields, $cfg);
+            $target   = self::pinnedTarget($row, $resolved, $policy, (string) ($src->fields['ref'] ?? ''));
+            if ($target['ref'] === '' && $policy !== 'release') {
                 continue;
             }
             // run() clears pending_action and records the outcome; each install is
             // independently verified and rolled back on failure.
-            PluginGitpluginsInstaller::run($src->fields, $ref, (string) ($resolved['sha'] ?? ''));
+            PluginGitpluginsInstaller::run($src->fields, $target['ref'], $target['sha']);
             $task->addVolume(1);
             $did++;
         }
@@ -92,6 +95,9 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
 
         $did = 0;
         $cfg = PluginGitpluginsConfig::singleton();
+
+        // Audit retention (personal data: acting user) — housekeeping, best-effort.
+        PluginGitpluginsLog::purgeExpired(time());
 
         foreach (PluginGitpluginsSource::activeRows(false) as $sourceId => $src) {
             $key = (string) ($src['plugin_key'] ?? '');
@@ -146,12 +152,14 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
                 // For an 'update', skip the run when nothing actually differs —
                 // prevents the reinstall-every-tick loop. A fresh 'install'
                 // (nothing on disk) always proceeds.
-                $proceed = $pending === 'install' || $installed === '' || $updateAvail;
-                $ref     = (string) ($resolved['ref'] ?? ($src['ref'] ?? ''));
-                if ($proceed && ($ref !== '' || (string) ($src['ref_policy'] ?? '') === 'release')) {
+                // A confirmed job is pinned: it proceeds on the reviewed commit even
+                // if the branch moved since (that is exactly what was approved).
+                $proceed = $pending === 'install' || $installed === '' || $updateAvail || self::hasPin($row);
+                $target  = self::pinnedTarget($row, $resolved, (string) ($src['ref_policy'] ?? 'latest_tag'), (string) ($src['ref'] ?? ''));
+                if ($proceed && ($target['ref'] !== '' || (string) ($src['ref_policy'] ?? '') === 'release')) {
                     // run() clears pending_action back to 'none' and records the new
                     // installed sha/version, so the next check is stable.
-                    PluginGitpluginsInstaller::run($src, $ref, $availSha);
+                    PluginGitpluginsInstaller::run($src, $target['ref'], $target['sha']);
                     $did++;
                 } elseif (!$proceed) {
                     // Nothing to do → clear the stale pending flag so we don't retry.
@@ -164,6 +172,65 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         }
 
         return $did > 0 ? 1 : 0;
+    }
+
+    /**
+     * PURE: request headers for a forge API call. The private-repo token goes
+     * as a Bearer header (the HTTP client drops it if a redirect leaves the
+     * host); without it a private repository never resolved a tag or a branch
+     * head, so its updates were never seen.
+     *
+     * @return array<string,string>
+     */
+    public static function apiHeaders(string $token): array
+    {
+        $h = ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'];
+        if ($token !== '') {
+            $h['Authorization'] = 'Bearer ' . $token; // never logged
+        }
+
+        return $h;
+    }
+
+    /** The decrypted repo token of a source row ('' when none or undecryptable). */
+    private static function sourceToken(array $src): string
+    {
+        try {
+            return PluginGitpluginsSource::decryptCredential($src['credential'] ?? null);
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /** PURE: was this queued job confirmed with a pinned ref and/or SHA? */
+    public static function hasPin(array $installRow): bool
+    {
+        return trim((string) ($installRow['pending_ref'] ?? '')) !== ''
+            || trim((string) ($installRow['pending_sha'] ?? '')) !== '';
+    }
+
+    /**
+     * PURE: what the cron fetches for a queued job — the ref/SHA the admin
+     * confirmed when the row carries one (L-8: never tomorrow's branch head),
+     * otherwise the freshly resolved target. Returns the ref to download (the
+     * SHA itself when known, see RefResolver::pinnedFetchRef) and the SHA to
+     * record as installed.
+     *
+     * @param array<string,mixed>                $installRow
+     * @param array{ref?:string,sha?:string}     $resolved
+     * @return array{ref:string,sha:string}
+     */
+    public static function pinnedTarget(array $installRow, array $resolved, string $policy, string $sourceRef = ''): array
+    {
+        if (self::hasPin($installRow)) {
+            $ref = trim((string) ($installRow['pending_ref'] ?? ''));
+            $sha = strtolower(trim((string) ($installRow['pending_sha'] ?? '')));
+
+            return ['ref' => PluginGitpluginsRefResolver::pinnedFetchRef($policy, $ref, $sha), 'sha' => $sha];
+        }
+        $ref = (string) ($resolved['ref'] ?? '');
+
+        return ['ref' => $ref !== '' ? $ref : $sourceRef, 'sha' => (string) ($resolved['sha'] ?? '')];
     }
 
     /** Fetch the install-state row for a plugin key (keyed lookup). [] if none. */
@@ -518,7 +585,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return [
                 'ref'     => $ref,
                 'version' => PluginGitpluginsVersion::normalise($ref),
-                'sha'     => self::fetchBranchSha($provider, $url, $ref, $cfg),
+                'sha'     => self::fetchBranchSha($provider, $url, $ref, $cfg, self::sourceToken($src)),
             ];
         }
 
@@ -535,7 +602,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         }
 
         // latest_tag → query the host tags API (SSRF-guarded), pick the highest.
-        $tags = self::fetchTags($provider, $url, $cfg);
+        $tags = self::fetchTags($provider, $url, $cfg, self::sourceToken($src));
         $best = PluginGitpluginsVersion::highest($tags);
         if ($best === null) {
             return ['ref' => $ref, 'version' => '', 'sha' => ''];
@@ -574,7 +641,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
      *
      * @return string[]
      */
-    private static function fetchTags(string $provider, string $url, PluginGitpluginsConfig $cfg): array
+    private static function fetchTags(string $provider, string $url, PluginGitpluginsConfig $cfg, string $token = ''): array
     {
         $api = PluginGitpluginsRefResolver::tagsApiUrl($provider, $url);
         if ($api === null) {
@@ -583,7 +650,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         try {
             $resp = PluginGitpluginsHttpclient::get($api, [
                 'allowed_hosts' => $cfg->getAllowedHosts(),
-                'headers'       => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
+                'headers'       => self::apiHeaders($token),
                 'timeout'       => $cfg->getFetchTimeoutSeconds(),
                 'max_bytes'     => 2097152,
             ]);
@@ -613,7 +680,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
      * proxy-aware). Live-box only; returns '' on any failure (treated as "no SHA",
      * which falls back to version comparison — never a false "update available").
      */
-    private static function fetchBranchSha(string $provider, string $url, string $branch, PluginGitpluginsConfig $cfg): string
+    private static function fetchBranchSha(string $provider, string $url, string $branch, PluginGitpluginsConfig $cfg, string $token = ''): string
     {
         if ($branch === '') {
             return '';
@@ -625,7 +692,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         try {
             $resp = PluginGitpluginsHttpclient::get($api, [
                 'allowed_hosts' => $cfg->getAllowedHosts(),
-                'headers'       => ['User-Agent' => 'GLPI-gitplugins', 'Accept' => 'application/json'],
+                'headers'       => self::apiHeaders($token),
                 'timeout'       => $cfg->getFetchTimeoutSeconds(),
                 'max_bytes'     => 2097152,
             ]);

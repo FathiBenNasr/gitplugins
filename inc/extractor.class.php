@@ -16,6 +16,28 @@ declare(strict_types=1);
 
 final class PluginGitpluginsExtractor
 {
+    /** Max entries an archive may hold (a GLPI plugin is a few hundred to a few thousand). */
+    public const MAX_ENTRIES = 20000;
+
+    /** Max total UNCOMPRESSED bytes written by one extraction (256 MiB). */
+    public const MAX_TOTAL_BYTES = 268435456;
+
+    /**
+     * PURE: does an extraction stay within budget? WHY: the download cap bounds
+     * the COMPRESSED bytes only; a tar.gz bomb of a few MB expands to gigabytes
+     * and fills GLPI_TMP_DIR / the plugins volume. Checked against the archive's
+     * declared sizes BEFORE anything is written, and again against the bytes
+     * actually produced while writing.
+     */
+    public static function withinBudget(
+        int $entries,
+        int $totalBytes,
+        int $maxEntries = self::MAX_ENTRIES,
+        int $maxBytes = self::MAX_TOTAL_BYTES
+    ): bool {
+        return $entries >= 0 && $totalBytes >= 0 && $entries <= $maxEntries && $totalBytes <= $maxBytes;
+    }
+
     /**
      * Sanitise one archive entry's path to a safe RELATIVE path, or null if it
      * must be rejected. Rejects absolute paths, any '..' segment, NUL bytes,
@@ -101,8 +123,14 @@ final class PluginGitpluginsExtractor
      * rename the single top dir to $key and verify setup.php. Returns the staged
      * plugin dir path ("<staging>/<key>"). Live-box only (uses the bundled
      * UnifiedArchive); throws \RuntimeException('extract_failed') on any problem.
+     * The two budget parameters default to MAX_ENTRIES / MAX_TOTAL_BYTES.
      */
-    public static function extractTo(string $archive, string $key): string
+    public static function extractTo(
+        string $archive,
+        string $key,
+        int $maxEntries = self::MAX_ENTRIES,
+        int $maxBytes = self::MAX_TOTAL_BYTES
+    ): string
     {
         $tmpBase = defined('GLPI_TMP_DIR') ? GLPI_TMP_DIR : sys_get_temp_dir();
         $staging = $tmpBase . '/gitplugins_x_' . bin2hex(random_bytes(8));
@@ -119,8 +147,22 @@ final class PluginGitpluginsExtractor
                 throw new \RuntimeException('extract_failed');
             }
 
+            $names = $arc->getFileNames();
+            // Bomb guard, before a single byte is written: entry count and the
+            // sum of the sizes the archive itself declares.
+            $declared = 0;
+            foreach ($names as $name) {
+                $data = method_exists($arc, 'getFileData') ? $arc->getFileData((string) $name) : null;
+                if (is_object($data) && isset($data->uncompressedSize)) {
+                    $declared += max(0, (int) $data->uncompressedSize);
+                }
+            }
+            if (!self::withinBudget(count($names), $declared, $maxEntries, $maxBytes)) {
+                throw new \RuntimeException('extract_failed');
+            }
+
             $safePaths = [];
-            foreach ($arc->getFileNames() as $name) {
+            foreach ($names as $name) {
                 $safe = self::sanitiseEntryPath((string) $name);
                 if ($safe === null) {
                     // A poisoned entry → abort the whole archive (fail closed).
@@ -136,7 +178,8 @@ final class PluginGitpluginsExtractor
 
             // Extract entry-by-entry to our sanitised relative paths (never trust
             // the library to honour our sanitisation).
-            foreach ($arc->getFileNames() as $name) {
+            $written = 0;
+            foreach ($names as $name) {
                 $safe = self::sanitiseEntryPath((string) $name);
                 if ($safe === null) {
                     continue;
@@ -150,6 +193,11 @@ final class PluginGitpluginsExtractor
                 @mkdir(dirname($absTarget), 0o750, true);
                 $content = $arc->getFileContent((string) $name);
                 if ($content === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+                // Declared sizes can lie: also bound what is really produced.
+                $written += strlen((string) $content);
+                if (!self::withinBudget(count($names), $written, $maxEntries, $maxBytes)) {
                     throw new \RuntimeException('extract_failed');
                 }
                 if (file_put_contents($absTarget, $content) === false) {

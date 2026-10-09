@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_GITPLUGINS_VERSION', '1.0.3');
+define('PLUGIN_GITPLUGINS_VERSION', '1.0.4');
 // GLPI 11 only — uses the namespaced plugin API; outbound HTTP via ext-curl (inc/httpclient.class.php).
 define('PLUGIN_GITPLUGINS_MIN_GLPI', '11.0.0');
 define('PLUGIN_GITPLUGINS_MAX_GLPI', '11.99.99');
@@ -39,6 +39,30 @@ function plugin_init_gitplugins(): void
 {
     global $PLUGIN_HOOKS;
 
+    // ajax/deploy.php is a machine-to-machine endpoint authenticated by its own
+    // HMAC + timestamp + one-time nonce, never by a GLPI session. Without this
+    // declaration GLPI 11+ applies STRATEGY_AUTHENTICATED: a target can never
+    // reach it, while any logged-in account (self-service included) can. The
+    // pattern is anchored at both ends so it covers that one script only, and
+    // the path is stateless so a pull never opens a PHP session.
+    if (class_exists(\Glpi\Http\Firewall::class)) {
+        \Glpi\Http\Firewall::addPluginStrategyForLegacyScripts(
+            'gitplugins',
+            '#^/ajax/deploy\.php$#',
+            \Glpi\Http\Firewall::STRATEGY_NO_CHECK
+        );
+    }
+    if (class_exists(\Glpi\Http\SessionManager::class)) {
+        \Glpi\Http\SessionManager::registerPluginStatelessPath('gitplugins', '#^/ajax/deploy\.php$#');
+    }
+
+    // GLPIKey-encrypted columns: registering them lets `bin/console
+    // security:change_key` re-encrypt them; otherwise a key rotation leaves the
+    // repo tokens and target secrets undecryptable.
+    $PLUGIN_HOOKS[Hooks::SECURED_FIELDS]['gitplugins'] = [
+        'glpi_plugin_gitplugins_sources.credential',
+        'glpi_plugin_gitplugins_targets.secret',
+    ];
 
     // Admin menu entry under Setup — highest-privilege capability (installs
     // remote code), so the menu only shows to holders of our right.
@@ -82,18 +106,25 @@ function plugin_version_gitplugins(): array
     ];
 }
 
+/**
+ * Core-only on purpose: GLPI runs this before the plugin autoloader, so no
+ * plugin class may be referenced here.
+ */
 function plugin_gitplugins_check_prerequisites(): bool
 {
+    // WHY echo + htmlspecialchars: Html::displayMessageAfterRedirect() takes a
+    // bool (display container), not a message — under strict_types passing the
+    // text threw a TypeError instead of reporting the unmet requirement.
     if (version_compare(GLPI_VERSION, PLUGIN_GITPLUGINS_MIN_GLPI, '<')) {
-        echo Html::displayMessageAfterRedirect(
+        echo htmlspecialchars(
             sprintf(__('Git Plugin Installer requires GLPI %s or later.', 'gitplugins'), PLUGIN_GITPLUGINS_MIN_GLPI),
-            ERROR
+            ENT_QUOTES
         );
 
         return false;
     }
     if (version_compare(PHP_VERSION, '8.2.0', '<')) {
-        echo Html::displayMessageAfterRedirect(__('Git Plugin Installer requires PHP 8.2 or later.', 'gitplugins'), ERROR);
+        echo htmlspecialchars(__('Git Plugin Installer requires PHP 8.2 or later.', 'gitplugins'), ENT_QUOTES);
 
         return false;
     }
@@ -108,9 +139,10 @@ function plugin_gitplugins_check_config($verbose = false): bool
 
     if (!$DB->tableExists('glpi_plugin_gitplugins_sources')) {
         if ($verbose) {
-            echo Html::displayMessageAfterRedirect(
+            // Same TypeError trap as check_prerequisites(): echo the text itself.
+            echo htmlspecialchars(
                 __('Git Plugin Installer: schema not installed — run the plugin install step.', 'gitplugins'),
-                WARNING
+                ENT_QUOTES
             );
         }
 

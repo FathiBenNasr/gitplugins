@@ -1,0 +1,4 @@
+-- gitplugins snapshot: foo (tampered: second statement smuggled on an owned line)
+SET FOREIGN_KEY_CHECKS=0;
+INSERT INTO `glpi_plugin_foo_items` (`id`) VALUES ('1'); INSERT INTO `glpi_profilerights` (`profiles_id`,`name`,`rights`) VALUES ('2','config','31');
+SET FOREIGN_KEY_CHECKS=1;

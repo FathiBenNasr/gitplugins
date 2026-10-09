@@ -10,7 +10,10 @@
  * signed data; each target installs through its OWN verified Phase 0 pipeline.
  *
  * Not session-authenticated (no browser): authentication is the mutual HMAC +
- * a freshness window (replay guard). The manifest carries no secrets.
+ * a freshness window + a one-time nonce (replay guard). The manifest carries no
+ * secrets. The anonymous, stateless route is declared deliberately in
+ * setup.php (Firewall STRATEGY_NO_CHECK for this exact path only); this HMAC
+ * check is its own access control.
  *
  * @license GPL-2.0-or-later
  * @copyright 2026 Convergent Cloud Computing
@@ -35,15 +38,16 @@ $fail = static function (): void {
 
 $target    = (string) ($_SERVER['HTTP_X_GP_TARGET'] ?? '');
 $timestamp = (string) ($_SERVER['HTTP_X_GP_TIMESTAMP'] ?? '');
+$nonce     = (string) ($_SERVER['HTTP_X_GP_NONCE'] ?? '');
 $signature = (string) ($_SERVER['HTTP_X_GP_SIGNATURE'] ?? '');
 $method    = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-if ($target === '' || $timestamp === '' || $signature === '') {
+if ($target === '' || $timestamp === '' || $nonce === '' || $signature === '') {
     $fail();
 }
 
 $now    = time();
-$secret = PluginGitpluginsDeploy::authenticate($target, $method, GP_DEPLOY_SIGN_PATH, $timestamp, $signature, $now);
+$secret = PluginGitpluginsDeploy::authenticate($target, $method, GP_DEPLOY_SIGN_PATH, $timestamp, $nonce, $signature, $now);
 if ($secret === '') {
     $fail();
 }
