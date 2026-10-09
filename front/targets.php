@@ -119,7 +119,7 @@ foreach ($DB->request(['FROM' => 'glpi_plugin_gitplugins_targets', 'ORDER' => 'n
       <tr>
         <td><code><?= htmlspecialchars((string) $r['name']) ?></code></td>
         <td><?= htmlspecialchars((string) $r['base_url']) ?: '<span class="text-muted">—</span>' ?></td>
-        <td><?= (int) $r['is_active'] === 1 ? '<span class="badge bg-success">' . htmlspecialchars(__('yes', 'gitplugins')) . '</span>' : '<span class="badge bg-secondary">' . htmlspecialchars(__('no', 'gitplugins')) . '</span>' ?></td>
+        <td><?= (int) $r['is_active'] === 1 ? '<span class="badge bg-success text-success-fg">' . htmlspecialchars(__('yes', 'gitplugins')) . '</span>' : '<span class="badge bg-secondary text-secondary-fg">' . htmlspecialchars(__('no', 'gitplugins')) . '</span>' ?></td>
         <td><?= htmlspecialchars((string) ($r['last_pull_at'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
         <td class="text-end">
 <?php if ($canUpdate): ?>

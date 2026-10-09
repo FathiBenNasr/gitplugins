@@ -78,10 +78,10 @@ foreach ($DB->request(['SELECT' => ['plugin_key'], 'FROM' => 'glpi_plugin_gitplu
           <div class="d-flex justify-content-between align-items-start">
             <h5 class="card-title mb-1"><?= htmlspecialchars((string) $e['name']) ?></h5>
 <?php if (isset($managed[$key])): ?>
-            <span class="badge bg-success"><?= htmlspecialchars(__('managed', 'gitplugins')) ?></span>
+            <span class="badge bg-success text-success-fg"><?= htmlspecialchars(__('managed', 'gitplugins')) ?></span>
 <?php endif; ?>
           </div>
-          <div class="mb-2"><code><?= htmlspecialchars($key) ?></code><?php if ((string) $e['category'] !== ''): ?> <span class="badge bg-secondary"><?= htmlspecialchars((string) $e['category']) ?></span><?php endif; ?></div>
+          <div class="mb-2"><code><?= htmlspecialchars($key) ?></code><?php if ((string) $e['category'] !== ''): ?> <span class="badge bg-secondary text-secondary-fg"><?= htmlspecialchars((string) $e['category']) ?></span><?php endif; ?></div>
 <?php if ((string) $e['description'] !== ''): ?>
           <p class="card-text small text-muted"><?= htmlspecialchars((string) $e['description']) ?></p>
 <?php endif; ?>

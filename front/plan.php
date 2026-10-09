@@ -28,11 +28,11 @@ $canUpdate  = Session::haveRight('plugin_gitplugins', UPDATE);
 $selectable = PluginGitpluginsPlanner::selectableKeys($plan);
 $badge = static function (string $action): string {
     return [
-        'update'            => 'bg-info',
-        'install'           => 'bg-primary',
-        'skip'              => 'bg-secondary',
-        'blocked_downgrade' => 'bg-danger',
-    ][$action] ?? 'bg-secondary';
+        'update'            => 'bg-info text-info-fg',
+        'install'           => 'bg-primary text-primary-fg',
+        'skip'              => 'bg-secondary text-secondary-fg',
+        'blocked_downgrade' => 'bg-danger text-danger-fg',
+    ][$action] ?? 'bg-secondary text-secondary-fg';
 };
 ?>
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-11">
@@ -61,18 +61,18 @@ $badge = static function (string $action): string {
         <td><?= htmlspecialchars((string) $r['installed']) ?: '<span class="text-muted">—</span>' ?></td>
         <td><?= htmlspecialchars((string) $r['available']) ?: '<span class="text-muted">—</span>' ?></td>
         <td><span class="badge <?= $badge((string) $r['action']) ?>"><?= htmlspecialchars((string) $r['action']) ?></span></td>
-        <td><?= !empty($r['needs_migration']) ? '<span class="badge bg-warning">' . htmlspecialchars(__('likely', 'gitplugins')) . '</span>' : '<span class="text-muted">—</span>' ?></td>
+        <td><?= !empty($r['needs_migration']) ? '<span class="badge bg-warning text-warning-fg">' . htmlspecialchars(__('likely', 'gitplugins')) . '</span>' : '<span class="text-muted">—</span>' ?></td>
         <td>
 <?php if (!empty($r['preflight_ok'])): ?>
-          <span class="badge bg-success"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span>
+          <span class="badge bg-success text-success-fg"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span>
 <?php else: ?>
-          <span class="badge bg-danger" title="<?= htmlspecialchars(implode("\n", (array) $r['blockers'])) ?>"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span>
+          <span class="badge bg-danger text-danger-fg" title="<?= htmlspecialchars(implode("\n", (array) $r['blockers'])) ?>"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span>
 <?php endif; ?>
 <?php if (!empty($r['warnings'])): ?>
-          <span class="badge bg-warning" title="<?= htmlspecialchars(implode("\n", (array) $r['warnings'])) ?>"><?= (int) count($r['warnings']) ?></span>
+          <span class="badge bg-warning text-warning-fg" title="<?= htmlspecialchars(implode("\n", (array) $r['warnings'])) ?>"><?= (int) count($r['warnings']) ?></span>
 <?php endif; ?>
         </td>
-        <td><?= (int) $r['known_issues'] > 0 ? '<span class="badge bg-danger">' . (int) $r['known_issues'] . '</span>' : '<span class="text-muted">0</span>' ?></td>
+        <td><?= (int) $r['known_issues'] > 0 ? '<span class="badge bg-danger text-danger-fg">' . (int) $r['known_issues'] . '</span>' : '<span class="text-muted">0</span>' ?></td>
       </tr>
 <?php endforeach; ?>
     </tbody>

@@ -5,6 +5,10 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-10-09
+
+GLPI 12 line: carries the readable-badge fix of 1.0.5 below. Reinstall after copying the files (`plugin:install` then `plugin:activate`), no schema change.
+
 ## [1.1.1] - 2026-10-09
 
 Security release for the GLPI 12 line: carries every fix of 1.0.4 below (October 2026 audit). **Reinstall required** after copying the files (`plugin:install` then `plugin:activate`). On this line the CSRF protection stays GLPI 12's `Sec-Fetch-Site`/`Origin` check, so the new forms carry no `_glpi_csrf_token` field.
@@ -15,6 +19,14 @@ Security release for the GLPI 12 line: carries every fix of 1.0.4 below (October
 - **Requires GLPI 12.0** (min 12.0.0, max 12.99.99); the 11.x line stays on the previous minor.
 - Class properties inherited from GLPI carry the native types GLPI 12 declares (`public static string $rightname`, …): an untyped redeclaration is a compile error that takes the whole GLPI instance down.
 - CSRF: no more `_glpi_csrf_token` fields, `Session::getNewCSRFToken()`/`checkCSRF()` calls or `X-Glpi-Csrf-Token` headers. GLPI 12 validates the browser's `Sec-Fetch-Site`/`Origin` headers instead.
+
+## [1.0.5] - 2026-10-09
+
+Version bump only for the UI: reinstall after copying the files (`plugin:install`
+then `plugin:activate`), no schema change.
+
+### Fixed
+- Unreadable badges: every `bg-<colour>` badge (status, health, plan, catalog, discovered, install preflight, sources, targets) now carries Tabler's contrasting foreground class `text-<colour>-fg`, as GLPI 11 core does; the text was dark on a dark background.
 
 ## [1.0.4] - 2026-10-09
 

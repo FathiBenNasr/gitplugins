@@ -127,7 +127,7 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php'
 ?>
     <hr>
     <h5 class="mb-2"><?= htmlspecialchars(__('Environment preflight', 'gitplugins')) ?>
-      <?php if ($pf['ok']): ?><span class="badge bg-success"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span><?php else: ?><span class="badge bg-danger"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span><?php endif; ?>
+      <?php if ($pf['ok']): ?><span class="badge bg-success text-success-fg"><?= htmlspecialchars(__('ready', 'gitplugins')) ?></span><?php else: ?><span class="badge bg-danger text-danger-fg"><?= htmlspecialchars(__('blocked', 'gitplugins')) ?></span><?php endif; ?>
     </h5>
 <?php if (!$pf['ok']): ?>
     <div class="alert alert-danger py-2"><ul class="mb-0">
@@ -158,11 +158,11 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php'
 ?>
     <hr>
     <h5 class="mb-2"><?= htmlspecialchars(__('Known issues', 'gitplugins')) ?>
-      <span class="badge bg-warning"><?= (int) count($issues) ?></span>
+      <span class="badge bg-warning text-warning-fg"><?= (int) count($issues) ?></span>
     </h5>
     <div class="alert alert-warning py-2 mb-0"><ul class="mb-0">
 <?php foreach ($issues as $iss): ?>
-      <li><?php if (($iss['kind'] ?? '') !== 'advisory' && ($iss['peer_key'] ?? '') !== ''): ?><span class="badge bg-secondary me-1"><?= htmlspecialchars((string) $iss['kind']) ?>: <?= htmlspecialchars((string) $iss['peer_key']) ?></span><?php endif; ?><?= htmlspecialchars((string) ($iss['message'] ?? '')) ?></li>
+      <li><?php if (($iss['kind'] ?? '') !== 'advisory' && ($iss['peer_key'] ?? '') !== ''): ?><span class="badge bg-secondary text-secondary-fg me-1"><?= htmlspecialchars((string) $iss['kind']) ?>: <?= htmlspecialchars((string) $iss['peer_key']) ?></span><?php endif; ?><?= htmlspecialchars((string) ($iss['message'] ?? '')) ?></li>
 <?php endforeach; ?>
     </ul></div>
 <?php endif; ?>
