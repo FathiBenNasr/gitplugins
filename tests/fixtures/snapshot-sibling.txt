@@ -1,0 +1,4 @@
+-- gitplugins snapshot: foo (tampered: targets the sibling plugin foo_x)
+SET FOREIGN_KEY_CHECKS=0;
+DROP TABLE IF EXISTS `glpi_plugin_foo_x_items`;
+SET FOREIGN_KEY_CHECKS=1;

@@ -82,8 +82,8 @@ final class DeployTest extends TestCase
 
     public function testRequestStringToSignBindsMethodPathTimestampTarget(): void
     {
-        $s = PluginGitpluginsDeploy::requestStringToSign('get', '/ajax/deploy.php', '1000', 'prod');
-        self::assertSame("GET\n/ajax/deploy.php\n1000\nprod", $s);
+        $s = PluginGitpluginsDeploy::requestStringToSign('get', '/ajax/deploy.php', '1000', 'prod', 'n0nce-0123456789ab');
+        self::assertSame("GET\n/ajax/deploy.php\n1000\nprod\nn0nce-0123456789ab", $s);
     }
 
     public function testFreshnessWindow(): void
@@ -100,7 +100,7 @@ final class DeployTest extends TestCase
     {
         // A target signs a pull request; the origin (with the same secret) accepts.
         $secret = 'shared-key';
-        $toSign = PluginGitpluginsDeploy::requestStringToSign('GET', 'gitplugins/ajax/deploy.php', '2000', 'prod');
+        $toSign = PluginGitpluginsDeploy::requestStringToSign('GET', 'gitplugins/ajax/deploy.php', '2000', 'prod', '0123456789abcdef');
         $sig    = PluginGitpluginsDeploy::sign($toSign, $secret);
         self::assertTrue(PluginGitpluginsDeploy::verify($toSign, $secret, $sig));
         // A replayed-but-stale timestamp is rejected by the freshness gate.

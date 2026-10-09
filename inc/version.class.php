@@ -52,17 +52,33 @@ final class PluginGitpluginsVersion
      */
     public static function highest(array $tags): ?string
     {
+        // A stable release wins over any pre-release (1.3.0-rc1, 2.0.0-beta…):
+        // latest_tag must not pull a release candidate onto a production box.
+        // Only when a repository has nothing but pre-releases is one picked.
         $best = null;
+        $bestPre = null;
         foreach ($tags as $tag) {
             $tag = (string) $tag;
             if ($tag === '') {
                 continue;
             }
-            if ($best === null || version_compare(self::normalise($tag), self::normalise($best), '>')) {
+            if (self::isPreRelease($tag)) {
+                if ($bestPre === null || version_compare(self::normalise($tag), self::normalise($bestPre), '>')) {
+                    $bestPre = $tag;
+                }
+            } elseif ($best === null || version_compare(self::normalise($tag), self::normalise($best), '>')) {
                 $best = $tag;
             }
         }
 
-        return $best;
+        return $best ?? $bestPre;
+    }
+
+    /** PURE: does a tag carry a pre-release marker (dev, alpha, beta, RC, a "-suffix")? */
+    public static function isPreRelease(string $tag): bool
+    {
+        $v = strtolower(self::normalise($tag));
+
+        return str_contains($v, '-') || preg_match('/(dev|alpha|beta|rc|pre|snapshot)/', $v) === 1;
     }
 }

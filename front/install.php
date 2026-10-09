@@ -35,11 +35,27 @@ $source = $src->fields;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     Session::checkRight('plugin_gitplugins', UPDATE);
+    // WHY: a right on the itemtype is not a right on this row — can() applies
+    // the source's entity too (a source of another entity cannot be queued).
+    if (!$src->can($id, UPDATE)) {
+        throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+    }
 
     // Resolve installed vs available and refuse a silent downgrade (A04).
     $installed = PluginGitpluginsInstaller::installedVersion((string) $source['plugin_key']);
     $resolved  = PluginGitpluginsUpdatecheck::resolveLatest($source, PluginGitpluginsConfig::singleton());
     $decision  = PluginGitpluginsInstaller::decideAction($installed, (string) ($resolved['version'] ?? ''), false);
+
+    // WHY: the admin approved the ref/SHA shown on the confirm screen. If the
+    // branch or tag moved since, what would be queued is not what was reviewed.
+    if (!PluginGitpluginsInstaller::confirmMatches(
+        (string) ($_POST['confirm_ref'] ?? ''),
+        (string) ($_POST['confirm_sha'] ?? ''),
+        $resolved
+    )) {
+        Session::addMessageAfterRedirect(__('The source moved since you reviewed it. Review the new ref and confirm again.', 'gitplugins'), false, ERROR);
+        Html::redirect($root . '/front/install.php?id=' . $id);
+    }
 
     if ($decision === 'blocked_downgrade') {
         Session::addMessageAfterRedirect(__('Refused: the available version is older than the installed one (downgrade not allowed).', 'gitplugins'), false, ERROR);
@@ -68,6 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'pending_action'               => $decision === 'update' ? 'update' : 'install',
         'last_result'                  => 'pending',
         'last_error'                   => null,
+        // Pin the reviewed target: the cron installs THIS ref/commit (L-8).
+        'pending_ref'                  => mb_substr((string) ($resolved['ref'] ?? ''), 0, 255) ?: null,
+        'pending_sha'                  => mb_substr((string) ($resolved['sha'] ?? ''), 0, 64) ?: null,
     ], ['plugin_key' => (string) $source['plugin_key']]);
     PluginGitpluginsLog::record($id, 'enqueue', 'ok', $decision . ' ' . $source['plugin_key'], (string) ($resolved['ref'] ?? ''));
 
@@ -83,6 +102,8 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php'
 <div class="container-fluid"><div class="row justify-content-center"><div class="col-lg-7">
 <form method="post" action="<?= htmlspecialchars($root . '/front/install.php') ?>" class="card mt-3">
   <input type="hidden" name="id" value="<?= (int) $id ?>">
+  <input type="hidden" name="confirm_ref" value="<?= htmlspecialchars((string) ($resolved['ref'] ?? '')) ?>">
+  <input type="hidden" name="confirm_sha" value="<?= htmlspecialchars((string) ($resolved['sha'] ?? '')) ?>">
   <div class="card-header"><h3 class="card-title mb-0"><?= htmlspecialchars(__('Confirm install / update', 'gitplugins')) ?></h3></div>
   <div class="card-body">
     <div class="alert alert-warning"><i class="ti ti-alert-triangle"></i>
@@ -168,7 +189,7 @@ Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php'
 <?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
-    <button type="submit" class="btn btn-primary" onclick="return confirm('<?= htmlspecialchars(__('Queue this install/update?', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>
+    <button type="submit" class="btn btn-primary" onclick="<?= PluginGitpluginsUi::confirmAttr(__('Queue this install/update?', 'gitplugins')) ?>"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>
     <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.php') ?>"><?= htmlspecialchars(__('Cancel', 'gitplugins')) ?></a>
   </div>
 </form>

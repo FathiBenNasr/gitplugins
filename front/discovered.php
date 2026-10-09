@@ -72,7 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
     }
     if (!in_array($host, PluginGitpluginsConfig::singleton()->getAllowedHosts(), true)) {
         Session::addMessageAfterRedirect(
-            sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host),
+            // The flash store renders HTML: escape the (plugin-declared) host.
+            htmlspecialchars(sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host), ENT_QUOTES),
             false,
             ERROR
         );

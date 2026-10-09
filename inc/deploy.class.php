@@ -29,6 +29,34 @@ final class PluginGitpluginsDeploy
     /** Replay window (seconds) a signed pull request timestamp may deviate. */
     public const SKEW_SECONDS = 300;
 
+    /** Shortest shared secret accepted (HMAC-SHA256 key: 32 chars ≈ 128+ bits when random). */
+    public const MIN_SECRET_LENGTH = 32;
+
+    /** Registered pull targets. */
+    public const TARGETS_TABLE = 'glpi_plugin_gitplugins_targets';
+
+    /** One-time request nonces already seen, per target, inside the replay window. */
+    public const NONCE_TABLE = 'glpi_plugin_gitplugins_deploy_nonces';
+
+    /** Path pattern of the deploy endpoint, relative to the plugin root (Firewall + stateless). */
+    public const ROUTE_PATTERN = '#^/ajax/deploy\.php$#';
+
+    /**
+     * PURE: is a shared secret long enough to be an HMAC key? WHY: the endpoint
+     * is reachable without a session; a short secret can be brute-forced
+     * offline from a single signed request.
+     */
+    public static function isStrongSecret(string $secret): bool
+    {
+        return strlen($secret) >= self::MIN_SECRET_LENGTH;
+    }
+
+    /** PURE: a request nonce is 16–64 URL-safe characters (e.g. bin2hex(random_bytes(16))). */
+    public static function isValidNonce(string $nonce): bool
+    {
+        return preg_match('/^[A-Za-z0-9_-]{16,64}$/D', $nonce) === 1;
+    }
+
     /**
      * PURE: build the SHA-pinned deploy manifest from the origin's install-state
      * rows joined to their source rows. Only ACTIVE sources with a genuinely
@@ -137,12 +165,13 @@ final class PluginGitpluginsDeploy
 
     /**
      * PURE: the canonical string a target signs to authenticate a pull request.
-     * Binds the HTTP method, the request path, the timestamp and the target name,
-     * so a signature can't be replayed against a different route/target.
+     * Binds the HTTP method, the request path, the timestamp, the target name and
+     * a one-time nonce, so a signature can't be replayed against a different
+     * route/target — nor, once its nonce is consumed, against the same one.
      */
-    public static function requestStringToSign(string $method, string $path, string $timestamp, string $target): string
+    public static function requestStringToSign(string $method, string $path, string $timestamp, string $target, string $nonce): string
     {
-        return strtoupper(trim($method)) . "\n" . trim($path) . "\n" . trim($timestamp) . "\n" . trim($target);
+        return strtoupper(trim($method)) . "\n" . trim($path) . "\n" . trim($timestamp) . "\n" . trim($target) . "\n" . trim($nonce);
     }
 
     /** PURE: is a request timestamp within the replay window of "now"? */
@@ -190,19 +219,26 @@ final class PluginGitpluginsDeploy
      * and the request HMAC. Returns the decrypted secret on success (so the caller
      * can sign the response), or '' on ANY failure (generic — no enumeration).
      */
-    public static function authenticate(string $target, string $method, string $path, string $timestamp, string $signature, int $now): string
-    {
+    public static function authenticate(
+        string $target,
+        string $method,
+        string $path,
+        string $timestamp,
+        string $nonce,
+        string $signature,
+        int $now
+    ): string {
         /** @var DBmysql $DB */
         global $DB;
 
-        if ($target === '' || !$DB->tableExists('glpi_plugin_gitplugins_targets')) {
+        if ($target === '' || !$DB->tableExists(self::TARGETS_TABLE) || !$DB->tableExists(self::NONCE_TABLE)) {
             return '';
         }
-        if (!self::isFresh((int) $timestamp, $now)) {
+        if (!self::isFresh((int) $timestamp, $now) || !self::isValidNonce($nonce)) {
             return '';
         }
         $row = $DB->request([
-            'FROM'  => 'glpi_plugin_gitplugins_targets',
+            'FROM'  => self::TARGETS_TABLE,
             'WHERE' => ['name' => $target, 'is_active' => 1],
             'LIMIT' => 1,
         ])->current();
@@ -210,21 +246,60 @@ final class PluginGitpluginsDeploy
             return '';
         }
         $secret = PluginGitpluginsSource::decryptCredential($row['secret'] ?? null);
-        if ($secret === '') {
+        // WHY: a secret registered before the 32-char minimum is refused here
+        // too (fail closed) — the admin must rotate it.
+        if (!self::isStrongSecret($secret)) {
             return '';
         }
-        $toSign = self::requestStringToSign($method, $path, $timestamp, $target);
+        $toSign = self::requestStringToSign($method, $path, $timestamp, $target, $nonce);
         if (!self::verify($toSign, $secret, $signature)) {
+            return '';
+        }
+        // WHY: the timestamp alone leaves a ±SKEW window in which a captured
+        // request can be replayed; each nonce is accepted once per target.
+        if (!self::consumeNonce((int) $row['id'], $nonce, $now)) {
             return '';
         }
 
         // Stamp last pull (best-effort audit).
         try {
-            $DB->update('glpi_plugin_gitplugins_targets', ['last_pull_at' => date('Y-m-d H:i:s', $now)], ['id' => (int) $row['id']]);
+            $DB->update(self::TARGETS_TABLE, ['last_pull_at' => date('Y-m-d H:i:s', $now)], ['id' => (int) $row['id']]);
         } catch (\Throwable $e) {
             // ignore
         }
 
         return $secret;
+    }
+
+    /**
+     * Live: record a nonce for a target; false when it was already used (the
+     * UNIQUE key makes the insert fail) or cannot be recorded (fail closed).
+     * Nonces older than twice the replay window are dropped first — a request
+     * that old is refused by isFresh() anyway.
+     */
+    private static function consumeNonce(int $targetId, string $nonce, int $now): bool
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        try {
+            $DB->delete(self::NONCE_TABLE, ['date_creation' => ['<', date('Y-m-d H:i:s', $now - 2 * self::SKEW_SECONDS)]]);
+            foreach ($DB->request([
+                'FROM'  => self::NONCE_TABLE,
+                'WHERE' => ['plugin_gitplugins_targets_id' => $targetId, 'nonce' => $nonce],
+                'LIMIT' => 1,
+            ]) as $seen) {
+                return false;
+            }
+            $DB->insert(self::NONCE_TABLE, [
+                'plugin_gitplugins_targets_id' => $targetId,
+                'nonce'                        => $nonce,
+                'date_creation'                => date('Y-m-d H:i:s', $now),
+            ]);
+        } catch (\Throwable $e) {
+            return false; // duplicate (race) or storage failure → refuse
+        }
+
+        return true;
     }
 }

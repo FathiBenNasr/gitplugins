@@ -136,8 +136,11 @@ final class PluginGitpluginsHttpclient
         if (empty($cfg['proxy_name'])) {
             return [];
         }
+        // An unset/invalid port must not become "host:0" (an unusable proxy URL):
+        // leave it out and let curl use its default proxy port.
+        $port = (int) ($cfg['proxy_port'] ?? 0);
         $opts = [
-            CURLOPT_PROXY     => 'http://' . $cfg['proxy_name'] . ':' . (int) ($cfg['proxy_port'] ?? 0),
+            CURLOPT_PROXY     => 'http://' . $cfg['proxy_name'] . ($port > 0 && $port <= 65535 ? ':' . $port : ''),
             CURLOPT_PROXYTYPE => CURLPROXY_HTTP,
         ];
         if (!empty($cfg['proxy_user'])) {
@@ -191,7 +194,17 @@ final class PluginGitpluginsHttpclient
         // CURLOPT_RESOLVE wants IPv6 literals in brackets.
         $pin = str_contains($ip, ':') ? '[' . $ip . ']' : $ip;
 
-        return [
+        // WHY: behind GLPI's proxy, CURLOPT_RESOLVE is ignored — the proxy
+        // resolves the CONNECT host itself, so the validated IP no longer binds
+        // the connection (DNS rebinding / SSRF through the proxy). CONNECT_TO
+        // makes curl tunnel to the vetted IP literal while TLS (SNI + certificate
+        // check) and the Host header keep the real name.
+        $viaProxy = $proxy !== [] ? [
+            CURLOPT_HTTPPROXYTUNNEL => true,
+            CURLOPT_CONNECT_TO      => [$host . ':443:' . $pin . ':443'],
+        ] : [];
+
+        return $viaProxy + [
             CURLOPT_HTTPGET        => true,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_PROTOCOLS      => CURLPROTO_HTTPS,

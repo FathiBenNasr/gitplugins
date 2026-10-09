@@ -121,4 +121,21 @@ final class KnownissuesTest extends TestCase
             self::assertIsArray(PluginGitpluginsKnownissues::normaliseIssue($iss));
         }
     }
+
+    /** Catalog issues carry no `source`: they belong to the catalog being seeded. */
+    public function testCatalogKnownIssuesAreSeeded(): void
+    {
+        $raw = [
+            ['plugin_key' => 'foo', 'kind' => 'advisory', 'message' => 'from the catalog'],
+            ['plugin_key' => 'bar', 'kind' => 'advisory', 'message' => 'tagged elsewhere', 'source' => 'builtin'],
+            ['plugin_key' => '', 'kind' => 'advisory'],
+            'not-an-array',
+        ];
+        $rows = PluginGitpluginsKnownissues::rowsForSource($raw, 'catalog:catalog.example.org');
+        self::assertSame(1, count($rows));
+        self::assertSame('foo', $rows[0]['plugin_key']);
+        self::assertSame('catalog:catalog.example.org', $rows[0]['source']);
+        // The shipped dataset keeps seeding under 'builtin'.
+        self::assertSame(1, count(PluginGitpluginsKnownissues::rowsForSource([$raw[1]], 'builtin')));
+    }
 }

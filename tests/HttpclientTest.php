@@ -231,6 +231,41 @@ final class HttpclientTest extends TestCase
         ]);
     }
 
+    /**
+     * L-1: behind GLPI's proxy the vetted IP must still bind the connection —
+     * curl is told to CONNECT to that literal (the proxy no longer resolves the
+     * name), while TLS keeps verifying the real host name.
+     */
+    public function testProxiedHopIsPinnedToTheVettedIp(): void
+    {
+        $GLOBALS['CFG_GLPI'] = ['proxy_name' => 'proxy.lan', 'proxy_port' => '3128'];
+        try {
+            PluginGitpluginsHttpclient::get('https://github.com/a/b', [
+                'allowed_hosts' => self::ALLOWED,
+                'resolver'      => self::publicDns(),
+                'transport'     => $this->transport([[200, '', 'ok']]),
+            ]);
+        } finally {
+            unset($GLOBALS['CFG_GLPI']);
+        }
+        $opts = $this->calls[0]['opts'];
+        self::assertSame('http://proxy.lan:3128', $opts[CURLOPT_PROXY]);
+        self::assertSame(['github.com:443:140.82.121.3:443'], $opts[CURLOPT_CONNECT_TO]);
+        self::assertTrue($opts[CURLOPT_HTTPPROXYTUNNEL]);
+        self::assertSame(2, $opts[CURLOPT_SSL_VERIFYHOST]);
+
+        // IPv6 literals are bracketed; without a proxy nothing changes.
+        $direct = PluginGitpluginsHttpclient::curlOptions([], 'github.com', '2606:50c0::1', 5, 5, [], static fn () => 0);
+        self::assertSame(['github.com:443:[2606:50c0::1]'], $direct[CURLOPT_RESOLVE]);
+        self::assertFalse(isset($direct[CURLOPT_CONNECT_TO]));
+    }
+
+    public function testProxyWithoutPortIsNotPortZero(): void
+    {
+        $o = PluginGitpluginsHttpclient::proxyOptions(['proxy_name' => 'proxy.lan', 'proxy_port' => '']);
+        self::assertSame('http://proxy.lan', $o[CURLOPT_PROXY]);
+    }
+
     public function testProxyOptionsMirrorGlpiConfiguration(): void
     {
         self::assertSame([], PluginGitpluginsHttpclient::proxyOptions([]));

@@ -401,3 +401,13 @@ msgstr "Laissez vide pour envoyer à tous les utilisateurs Super-Admin actifs (o
 
 msgid "Email a digest of managed plugins that have an available update"
 msgstr "Envoyer par e-mail un résumé des plugins gérés ayant une mise à jour disponible"
+
+msgid "The source moved since you reviewed it. Review the new ref and confirm again."
+msgstr "La source a changé depuis votre relecture. Relisez la nouvelle référence et confirmez de nouveau."
+
+msgid "This plugin is managed by the GLPI marketplace; update it from the marketplace."
+msgstr "Ce plugin est géré par le marketplace GLPI ; mettez-le à jour depuis le marketplace."
+
+#, c-format
+msgid "The shared secret must be at least %d characters long."
+msgstr "Le secret partagé doit compter au moins %d caractères."

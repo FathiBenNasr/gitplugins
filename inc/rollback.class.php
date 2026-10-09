@@ -131,7 +131,7 @@ final class PluginGitpluginsRollback
             return false;
         }
         if ($dump !== '' && is_file($dump)) {
-            PluginGitpluginsSnapshot::restore($dump); // best-effort schema restore
+            PluginGitpluginsSnapshot::restore($dump, $key); // best-effort schema restore
         }
         $ok = PluginGitpluginsInstaller::reinstallActive($key);
         PluginGitpluginsLog::record(
@@ -192,13 +192,54 @@ final class PluginGitpluginsRollback
             'LIMIT' => 1,
         ])->current();
         if ($row !== null) {
-            self::unlinkFiles($row);
+            // WHY: a pre-1.0.4 install wrote ONE dump per plugin, shared by every
+            // retained row; pruning the oldest row must not unlink a file a newer
+            // snapshot still points at.
+            $others = array_values(array_filter(
+                self::rowsFor((string) ($row['plugin_key'] ?? '')),
+                static fn (array $r): bool => (int) ($r['id'] ?? 0) !== $id
+            ));
+            foreach (self::pathsToUnlink($row, $others) as $p) {
+                if (is_file($p)) {
+                    @unlink($p);
+                }
+            }
         }
         try {
             $DB->delete('glpi_plugin_gitplugins_snapshots', ['id' => $id]);
         } catch (\Throwable $e) {
             // best-effort
         }
+    }
+
+    /**
+     * PURE: the files of $row that may be deleted — its backup zip and dump —
+     * minus any path still referenced by one of $otherRows. Unit-tested.
+     *
+     * @param array<string,mixed>             $row
+     * @param array<int,array<string,mixed>>  $otherRows the plugin's remaining snapshots
+     * @return string[]
+     */
+    public static function pathsToUnlink(array $row, array $otherRows): array
+    {
+        $inUse = [];
+        foreach ($otherRows as $o) {
+            foreach (['files_archive_path', 'db_dump_path'] as $col) {
+                $p = (string) ($o[$col] ?? '');
+                if ($p !== '') {
+                    $inUse[$p] = true;
+                }
+            }
+        }
+        $out = [];
+        foreach (['files_archive_path', 'db_dump_path'] as $col) {
+            $p = (string) ($row[$col] ?? '');
+            if ($p !== '' && !isset($inUse[$p])) {
+                $out[$p] = $p;
+            }
+        }
+
+        return array_values($out);
     }
 
     /** Remove a snapshot's on-disk backup + dump files (if any). */

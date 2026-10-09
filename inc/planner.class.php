@@ -122,6 +122,23 @@ final class PluginGitpluginsPlanner
         return $rows;
     }
 
+    /** Live: the available commit SHA cached by the last check ('' when unknown / not a SHA). */
+    private static function availableShaFor(string $key): string
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $row = $DB->request([
+            'SELECT' => ['available_sha'],
+            'FROM'   => 'glpi_plugin_gitplugins_installs',
+            'WHERE'  => ['plugin_key' => $key],
+            'LIMIT'  => 1,
+        ])->current();
+        $sha = strtolower(trim((string) ($row['available_sha'] ?? '')));
+
+        return PluginGitpluginsRefResolver::isSha($sha) ? $sha : '';
+    }
+
     /**
      * Live: queue pending_action='update' for the given plugin_keys, restricted to
      * rows that are genuinely selectable in the current plan (never blindly trust
@@ -146,6 +163,10 @@ final class PluginGitpluginsPlanner
                 'pending_action' => 'update',
                 'last_result'    => 'pending',
                 'last_error'     => null,
+                // Pin the commit the plan showed (when known) so the cron
+                // installs what was selected, not a later branch head (L-8).
+                'pending_ref'    => null,
+                'pending_sha'    => self::availableShaFor($key) ?: null,
             ], ['plugin_key' => $key]);
             PluginGitpluginsLog::record(null, 'enqueue', 'ok', 'bulk update ' . $key);
             $queued++;

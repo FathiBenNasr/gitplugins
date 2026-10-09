@@ -174,6 +174,35 @@ final class PluginGitpluginsKnownissues
     }
 
     /**
+     * PURE: the normalised rows of $rawIssues that belong to $source. A record
+     * that names no source belongs to the source being seeded — catalog issues
+     * carry none, and normaliseIssue() would otherwise label them 'builtin' and
+     * every catalog advisory was silently discarded. A record explicitly tagged
+     * with another source is still left out.
+     *
+     * @param array<int,mixed> $rawIssues
+     * @return array<int,array<string,string>>
+     */
+    public static function rowsForSource(array $rawIssues, string $source): array
+    {
+        $rows = [];
+        foreach ($rawIssues as $raw) {
+            if (!is_array($raw)) {
+                continue;
+            }
+            if (trim((string) ($raw['source'] ?? '')) === '') {
+                $raw['source'] = $source;
+            }
+            $norm = self::normaliseIssue($raw);
+            if ($norm !== null && $norm['source'] === mb_substr($source, 0, 64)) {
+                $rows[] = $norm;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * Live: consult the registry for one plugin at a version against the set of
      * installed active peers. Reads our known_issues table (DB); returns the
      * applicable warnings. Never throws into the caller.
@@ -261,16 +290,7 @@ final class PluginGitpluginsKnownissues
         if (!$DB->tableExists('glpi_plugin_gitplugins_known_issues')) {
             return 0;
         }
-        $rows = [];
-        foreach ($rawIssues as $raw) {
-            if (!is_array($raw)) {
-                continue;
-            }
-            $norm = self::normaliseIssue($raw);
-            if ($norm !== null && $norm['source'] === $source) {
-                $rows[] = $norm;
-            }
-        }
+        $rows = self::rowsForSource($rawIssues, $source);
 
         $written = 0;
         try {

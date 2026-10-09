@@ -37,6 +37,23 @@ final class PluginGitpluginsRefResolver
         return (bool) preg_match('#^[A-Za-z0-9._/\-]+$#', $ref);
     }
 
+    /**
+     * PURE: the ref to download for a queued job. WHY: a branch or tag is
+     * mutable — fetching it by name at cron time can install code nobody
+     * reviewed while installed_sha certifies the reviewed commit. When the
+     * confirmed SHA is known we fetch that exact commit. The release policy
+     * downloads a release asset by tag, so it keeps the tag.
+     */
+    public static function pinnedFetchRef(string $policy, string $ref, string $sha): string
+    {
+        $sha = strtolower(trim($sha));
+        if ($policy !== 'release' && $sha !== '' && self::isSha($sha)) {
+            return $sha;
+        }
+
+        return trim($ref);
+    }
+
     /** Looks like a 7–40 char hex commit SHA. */
     public static function isSha(string $ref): bool
     {

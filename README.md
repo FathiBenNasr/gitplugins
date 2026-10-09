@@ -103,6 +103,12 @@ exactly like marketplace ones (their own install hooks run).
 > **Self-managed:** once installed, Git Plugin Installer can install and update
 > **itself** from its own git source like any other managed plugin.
 
+> **Upgrading (every version bump):** copying the new files is not enough — run
+> `plugin:install` again (then `plugin:activate`), or GLPI sees a code/database
+> version mismatch, deactivates the plugin and every page answers 404. 1.1.1
+> (and 1.0.4 on the GLPI 11 line) adds a table (`glpi_plugin_gitplugins_deploy_nonces`) and two columns, created
+> by that reinstall.
+
 ## Usage
 
 Menu: **Setup → Git Plugin Installer**.
@@ -165,7 +171,15 @@ One GLPI right is registered on install:
 Because installing remote code is the highest-privilege capability, the right is
 granted on install **only** to profiles that already hold **`config: UPDATE`**
 (typically Super-Admin). Logged-in admins must re-login for session rights to
-refresh. Uninstall removes the right.
+refresh. Uninstall removes the right. A reinstall (version bump) grants it only
+to profiles that never had it: a right an administrator took away from a profile
+stays taken away.
+
+Each source is also checked at the row level: editing, removing or queuing a
+source requires the right **on that source's entity**, and the same business
+rules (https, host allowlist, ref policy, marketplace-managed keys refused, token
+encrypted, `build_on_install` never settable) apply to the REST API and massive
+actions as to the form.
 
 ## Architecture
 
@@ -224,8 +238,13 @@ to **OWASP Top 10 (2021)** / **ASVS L2+**:
   `plugins/`), `0600/0700`, web-user owned — a leaked backup cannot be executed to
   re-introduce a vulnerable version.
 - **Multi-target deploy** — pull model only: the origin serves a read-only,
-  **HMAC-signed, SHA-pinned** deploy manifest (freshness/replay window, no
-  secrets); there is **no inbound code-execution endpoint** on any instance.
+  **HMAC-signed, SHA-pinned** deploy manifest (freshness window + one-time
+  nonce, no secrets); there is **no inbound code-execution endpoint** on any
+  instance. A pull sends `X-Gp-Target`, `X-Gp-Timestamp`, `X-Gp-Nonce` (16–64
+  URL-safe characters, single use) and `X-Gp-Signature` = hex HMAC-SHA256 of
+  `METHOD\npath\ntimestamp\ntarget\nnonce`; shared secrets are at least 32
+  characters. `ajax/deploy.php` is the only route declared anonymous
+  (`STRATEGY_NO_CHECK`, stateless) — the HMAC is its access control.
 - **A01 Broken Access Control** — dedicated `plugin_gitplugins` right, granted
   only to `config: UPDATE` profiles; every front/ajax entry checks login + right.
 - **Secrets** — credentials **GLPIKey-encrypted** at rest, sent only as an auth

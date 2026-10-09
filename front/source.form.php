@@ -26,101 +26,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (isset($_POST['delete']) && $id > 0) {
         Session::checkRight('plugin_gitplugins', PURGE);
+        // WHY: a right on the itemtype is not a right on this row — can()
+        // applies the source's entity (and recursion) as well (M-1).
+        if (!$src->can($id, PURGE)) {
+            throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+        }
         // Remove from management only — does NOT uninstall the GLPI plugin.
         $src->delete(['id' => $id], true);
         Session::addMessageAfterRedirect(__('Source removed from management.', 'gitplugins'));
         Html::redirect($root . '/front/source.php');
     }
 
-    $cfg      = PluginGitpluginsConfig::singleton();
-    $isLocal  = ($_POST['source_type'] ?? 'git') === 'local' && $cfg->allowLocalSources();
-    $key      = strtolower(preg_replace('/[^a-z0-9_]/i', '', (string) ($_POST['plugin_key'] ?? '')) ?? '');
-    $policy   = (string) ($_POST['ref_policy'] ?? 'latest_tag');
-    $allowed  = ['track_branch', 'latest_tag', 'pin_tag', 'pin_sha', 'release'];
-    $ref      = trim((string) ($_POST['ref'] ?? ''));
-    $errors   = [];
-
-    if ($isLocal) {
-        // LOCAL source (Phase 1): no HTTPS/host/ref checks — the "URL" is an
-        // absolute filesystem path that MUST sit under the configured allowlist.
-        // ref_policy is irrelevant, stored as latest_tag for a stable default.
-        $url    = str_replace(["\r", "\n", "\0"], '', trim((string) ($_POST['url'] ?? '')));
-        $host   = '';
-        $policy = 'latest_tag';
-        $ref    = '';
-        if (!PluginGitpluginsLocalsource::pathAllowed($url, $cfg->getLocalSourceRoots())) {
-            $errors[] = __('The local path must be an absolute path under an allowed root (see Configuration).', 'gitplugins');
-        }
-    } else {
-        $url = PluginGitpluginsSource::normaliseUrl((string) ($_POST['url'] ?? ''));
-
-        // Server-side validation (A03/ASVS): HTTPS URL, valid policy/ref.
-        if (strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https' || PluginGitpluginsSource::hostOf($url) === '') {
-            $errors[] = __('The repository URL must be an https:// URL.', 'gitplugins');
-        }
-        if (!in_array($policy, $allowed, true)) {
-            $policy = 'latest_tag';
-        }
-        // latest_tag and release resolve a ref themselves (latest tag / latest
-        // release), so a ref is optional for both; release additionally accepts
-        // an explicit tag to pin a specific release. Pinned policies require a ref.
-        $refOptional = in_array($policy, ['latest_tag', 'release'], true);
-        if (!$refOptional && ($ref === '' || !PluginGitpluginsRefResolver::isValidRef($ref))) {
-            $errors[] = __('A valid ref (branch, tag or commit SHA) is required for this policy.', 'gitplugins');
-        }
-        if ($policy === 'release' && $ref !== '' && !PluginGitpluginsRefResolver::isValidRef($ref)) {
-            $errors[] = __('The release tag is not a valid ref.', 'gitplugins');
-        }
-        // Host allowlist enforcement at save time (A10 defence in depth).
-        $host = PluginGitpluginsSource::hostOf($url);
-        if ($host !== '' && !in_array($host, $cfg->getAllowedHosts(), true)) {
-            $errors[] = sprintf(__('Host "%s" is not in the allowed-hosts list (see Configuration).', 'gitplugins'), $host);
-        }
+    // Same object-level check before any modification of an existing row (M-1).
+    if ($id > 0 && !$src->can($id, UPDATE)) {
+        throw new \Glpi\Exception\Http\AccessDeniedHttpException();
     }
 
-    if ($key === '') {
-        $errors[] = __('A plugin key (lowercase letters, digits, underscore) is required.', 'gitplugins');
-    }
-
-    if ($errors) {
-        foreach ($errors as $e) {
-            Session::addMessageAfterRedirect($e, false, ERROR);
-        }
-        Html::redirect($root . '/front/source.form.php' . ($id > 0 ? '?id=' . $id : ''));
-    }
-
-    $data = [
-        'name'       => mb_substr(str_replace(["\r", "\n", "\0"], '', trim((string) ($_POST['name'] ?? ''))) ?: $key, 0, 255),
-        'url'        => mb_substr($url, 0, 255),
-        'host'       => mb_substr($host, 0, 255),
-        'provider'   => $isLocal ? 'local' : PluginGitpluginsSource::deriveProvider($url),
-        'plugin_key' => mb_substr($key, 0, 64),
-        'ref_policy' => $policy,
-        'ref'        => $ref !== '' ? mb_substr($ref, 0, 255) : null,
-        'is_active'  => isset($_POST['is_active']) ? 1 : 0,
+    // Business rules (https, host allowlist, ref policy, local roots,
+    // marketplace keys) and credential encryption live in the model
+    // (PluginGitpluginsSource::prepareInputFor*), so the REST API and massive
+    // actions get exactly the same checks as this form (L-27). A refusal queues
+    // its reasons and returns false.
+    $input = [
+        'name'        => (string) ($_POST['name'] ?? ''),
+        'url'         => (string) ($_POST['url'] ?? ''),
+        'plugin_key'  => (string) ($_POST['plugin_key'] ?? ''),
+        'ref_policy'  => (string) ($_POST['ref_policy'] ?? 'latest_tag'),
+        'ref'         => (string) ($_POST['ref'] ?? ''),
+        'source_type' => (string) ($_POST['source_type'] ?? 'git'),
+        'is_active'   => isset($_POST['is_active']) ? 1 : 0,
+        // Write-only: plaintext here, encrypted by the model; blank keeps it.
+        'credential'  => (string) ($_POST['credential'] ?? ''),
     ];
-    // Credential: only (re)write when a non-empty value is submitted; never echo.
-    $cred = (string) ($_POST['credential'] ?? '');
-    if ($cred !== '') {
-        $data['credential'] = PluginGitpluginsSource::encryptCredential($cred);
-    } elseif (isset($_POST['clear_credential'])) {
-        $data['credential'] = null;
+    if (isset($_POST['clear_credential'])) {
+        $input['_clear_credential'] = 1;
     }
 
-    if ($id > 0 && $src->getFromDB($id)) {
-        $data['id'] = $id;
-        $src->update($data);
+    if ($id > 0) {
+        $input['id'] = $id;
+        if (!$src->update($input)) {
+            Html::redirect($root . '/front/source.form.php?id=' . $id);
+        }
         Session::addMessageAfterRedirect(__('Source saved.', 'gitplugins'));
     } else {
-        $data['entities_id'] = (int) ($_SESSION['glpiactive_entity'] ?? 0);
-        $id = (int) $src->add($data);
+        $input['entities_id'] = (int) ($_SESSION['glpiactive_entity'] ?? 0);
+        $newId = (int) $src->add($input);
+        if ($newId <= 0) {
+            Html::redirect($root . '/front/source.form.php');
+        }
+        $id = $newId;
         Session::addMessageAfterRedirect(__('Source created.', 'gitplugins'));
     }
     Html::redirect($root . '/front/source.form.php?id=' . $id);
 }
 
-$id     = (int) ($_GET['id'] ?? 0);
-$isEdit = $id > 0 && $src->getFromDB($id);
+$id = (int) ($_GET['id'] ?? 0);
+// Object-level read check: a source of an entity outside the session is not shown (M-1).
+if ($id > 0 && !$src->can($id, READ)) {
+    throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+}
+$isEdit = $id > 0;
 $f      = $isEdit ? $src->fields : [
     'name' => '', 'url' => '', 'plugin_key' => '', 'ref_policy' => 'latest_tag', 'ref' => '', 'is_active' => 1, 'credential' => null,
 ];
@@ -222,7 +187,7 @@ $curType      = (($f['provider'] ?? '') === 'local') ? 'local' : 'git';
     <button type="submit" name="save" class="btn btn-primary"><?= htmlspecialchars(__('Save', 'gitplugins')) ?></button>
     <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.php') ?>"><?= htmlspecialchars(__('Back', 'gitplugins')) ?></a>
 <?php if ($isEdit): ?>
-    <button type="submit" name="delete" formnovalidate class="btn btn-outline-danger ms-auto" onclick="return confirm('<?= htmlspecialchars(__('Remove this source from management? The installed plugin is NOT uninstalled.', 'gitplugins')) ?>');"><?= htmlspecialchars(__('Remove', 'gitplugins')) ?></button>
+    <button type="submit" name="delete" formnovalidate class="btn btn-outline-danger ms-auto" onclick="<?= PluginGitpluginsUi::confirmAttr(__('Remove this source from management? The installed plugin is NOT uninstalled.', 'gitplugins')) ?>"><?= htmlspecialchars(__('Remove', 'gitplugins')) ?></button>
 <?php endif; ?>
   </div>
 </form>
