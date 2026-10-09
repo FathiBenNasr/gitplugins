@@ -1,0 +1,2 @@
+INSERT INTO `glpi_plugin_foo_items` (`id`,`name`) VALUES ("1'", 'x');
+INSERT INTO `glpi_plugin_foo_items` (`id`) VALUES ('1);

@@ -75,6 +75,29 @@ final class SnapshotTest extends TestCase
         self::assertFalse(PluginGitpluginsSnapshot::statementsAreOwned([], $owned), 'empty dump is not a restore');
     }
 
+    /**
+     * L-63: a statement whose head names an owned table but whose body reads a
+     * core table (INSERT ... SELECT, CREATE ... SELECT), hides a second
+     * statement behind a double-quoted string, or leaves a quote open, is
+     * refused — each one on its own.
+     */
+    public function testRestoreRejectsOwnedHeadWithForeignBody(): void
+    {
+        $read  = static fn (string $f): array => PluginGitpluginsSnapshot::splitStatements((string) file_get_contents(__DIR__ . '/fixtures/' . $f));
+        $clean = $read('snapshot-clean.txt');
+        $owned = PluginGitpluginsSnapshot::ownedTables(PluginGitpluginsSnapshot::tablesNamedIn($clean), 'foo');
+
+        $bad = array_values(array_filter($read('snapshot-readcore.txt'), static fn (string $s): bool => str_contains($s, 'SELECT')));
+        self::assertSame(2, count($bad));
+        foreach (array_merge($bad, $read('snapshot-quoting.txt')) as $stmt) {
+            self::assertFalse(PluginGitpluginsSnapshot::statementsAreOwned([$stmt], $owned), $stmt);
+        }
+
+        // The skeleton keeps a genuine dump line restorable, escaped quote and `;` included.
+        $values = array_values(array_filter($clean, static fn (string $s): bool => str_contains($s, 'VALUES')));
+        self::assertSame("INSERT INTO `` (``,``) VALUES ('','')", PluginGitpluginsSnapshot::skeleton($values[0]));
+    }
+
     /** A table of an installed sibling plugin `foo_x` is never captured as `foo`'s. */
     public function testOwnedTablesSiblingPrefix(): void
     {

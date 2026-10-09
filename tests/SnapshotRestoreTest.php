@@ -67,7 +67,7 @@ PHP;
 
     public function testTamperedSnapshotExecutesNothing(): void
     {
-        foreach (['snapshot-tampered.txt', 'snapshot-smuggled.txt', 'snapshot-sibling.txt'] as $fixture) {
+        foreach (['snapshot-tampered.txt', 'snapshot-smuggled.txt', 'snapshot-sibling.txt', 'snapshot-readcore.txt'] as $fixture) {
             $r = self::restore($fixture, 'foo', true, 'gitplugins-snap-foo-20261009120000-a1b2c3.sql.gz');
             self::assertFalse($r['ok'], $fixture);
             self::assertSame(0, $r['ran'], $fixture . ': not a single statement may run');

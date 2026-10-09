@@ -14,7 +14,7 @@ differ.
 
 ### Security
 - **Rollback snapshots**: each snapshot now owns its database dump (`gitplugins-snap-<key>-<stamp>-<random>.sql.gz`). The single per-plugin file was overwritten by every update — a rollback to N-2 restored N-1's schema — and pruning the oldest snapshot deleted the dump the newest one needed. Pruning never deletes a file another snapshot still references.
-- **Snapshot restore** only runs a dump that sits in GLPI's dump directory under the plugin's own name, and only if every statement is a `DROP/CREATE/INSERT` on the plugin's own tables (a sibling plugin whose key extends this one is excluded). Anything else executes nothing.
+- **Snapshot restore** only runs a dump that sits in GLPI's dump directory under the plugin's own name, and only if every statement is a `DROP/CREATE/INSERT` on the plugin's own tables (a sibling plugin whose key extends this one is excluded) and has exactly the form a snapshot writes — no `INSERT … SELECT`, no `CREATE … SELECT`, no double-quoted string, no second statement. Anything else executes nothing.
 - **Confirmed commit is the installed commit**: the confirm screen's ref/SHA is carried with the queued job (`pending_ref`/`pending_sha`); a source that moved since the review is refused, the cron fetches that exact commit, and the downloaded `setup.php` version is checked again against the installed one (the `release` policy can no longer downgrade; `allow_downgrade` is honoured).
 - **Row-level access**: editing, removing, viewing or queuing a source checks the right on that source's entity, not only on the itemtype.
 - **Model-level rules**: https, host allowlist, ref policy, local roots and token encryption are enforced in `PluginGitpluginsSource::prepareInputForAdd/Update`, so the REST API and massive actions get them too; `build_on_install` can no longer be set that way; `credential` is an undisclosed field.
@@ -28,6 +28,7 @@ differ.
 - **Confirmation dialogs** are JS-encoded (`PluginGitpluginsUi::confirmAttr`): the French apostrophe broke the handler and the form was submitted without confirmation.
 
 ### Fixed
+- Registering a discovered plugin no longer logs and announces a registration the source model refused.
 - `check_prerequisites()`/`check_config()` threw a `TypeError` (string given to `Html::displayMessageAfterRedirect(bool)`) instead of reporting the unmet requirement.
 - Catalog `known_issues` were always discarded at seeding; `catalog_url` was cut at 255 characters (half a URL with several catalogs); `latest_tag` could pick a pre-release over a stable tag; private repositories never resolved tags or branch heads (no token on the API calls).
 
