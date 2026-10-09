@@ -108,10 +108,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
         'is_recursive' => (int) ($_SESSION['glpiactive_entity_recursive'] ?? 0),
     ];
     $id = (int) $src->add($data);
+    if ($id <= 0) {
+        // The model refused the row (PluginGitpluginsSource::prepareInputForAdd
+        // queued its reasons): never log or announce a registration that did not happen.
+        Html::redirect($root . '/front/discovered.php');
+    }
 
-    PluginGitpluginsLog::record($id ?: null, 'register', 'ok', 'registered ' . $key, $ref);
+    PluginGitpluginsLog::record($id, 'register', 'ok', 'registered ' . $key, $ref);
 
-    if ($id > 0 && $declared['private']) {
+    if ($declared['private']) {
         // Private repo: needs a credential before any fetch will succeed. Send the
         // admin straight to the editor to add the GLPIKey-encrypted token.
         Session::addMessageAfterRedirect(__('Source registered. Add the private-repo token to enable fetching.', 'gitplugins'));

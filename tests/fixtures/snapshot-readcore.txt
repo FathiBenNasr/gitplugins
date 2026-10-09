@@ -1,0 +1,10 @@
+-- gitplugins snapshot: foo (tampered: owned-table statements that read a core table)
+SET FOREIGN_KEY_CHECKS=0;
+DROP TABLE IF EXISTS `glpi_plugin_foo_items`;
+CREATE TABLE `glpi_plugin_foo_items` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB SELECT `id`, `password` AS `name` FROM `glpi_users`;
+INSERT INTO `glpi_plugin_foo_items` (`id`,`name`) SELECT `id`, `password` FROM `glpi_users`;
+SET FOREIGN_KEY_CHECKS=1;

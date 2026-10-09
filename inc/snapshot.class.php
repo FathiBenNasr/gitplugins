@@ -95,9 +95,22 @@ final class PluginGitpluginsSnapshot
             . '|INSERT INTO ' . $tables . ' \\(.*)$/sD';
         foreach ($statements as $stmt) {
             $stmt = (string) $stmt;
-            // A `;` outside a quoted value means a second statement was smuggled
-            // onto the same line: dumpTable() never writes one there.
-            if (preg_match($shape, $stmt) !== 1 || self::hasUnquotedSemicolon($stmt)) {
+            if (preg_match($shape, $stmt) !== 1) {
+                return false;
+            }
+            // WHY the skeleton: the shape above only pins the statement's head.
+            // `INSERT INTO <owned> (...) SELECT ... FROM <core table>` or
+            // `CREATE TABLE <owned> (...) SELECT ...` match it while reading
+            // core data. With every quoted value and identifier collapsed, what
+            // is left must be exactly what dumpTable() writes: one statement
+            // (no `;`), no double-quoted string, an INSERT made of a column list
+            // and literal values only, and no SELECT anywhere.
+            $skel = self::skeleton($stmt);
+            if ($skel === null || str_contains($skel, ';') || preg_match('/\bSELECT\b/i', $skel) === 1) {
+                return false;
+            }
+            if (str_starts_with($stmt, 'INSERT INTO ')
+                && preg_match("/^INSERT INTO `` \\(``(?:,``)*\\) VALUES \\((?:''|NULL)(?:,(?:''|NULL))*\\)$/D", $skel) !== 1) {
                 return false;
             }
         }
@@ -105,27 +118,45 @@ final class PluginGitpluginsSnapshot
         return true;
     }
 
-    /** PURE: does $stmt contain a `;` outside a single-quoted SQL string? */
-    private static function hasUnquotedSemicolon(string $stmt): bool
+    /**
+     * PURE: $stmt with every single-quoted value collapsed to `''` and every
+     * backtick identifier to an empty pair of backticks, or null when a quote is
+     * left open or a double quote appears outside them (dumpTable() never
+     * writes one; MySQL would read it as a string the scan cannot see).
+     */
+    public static function skeleton(string $stmt): ?string
     {
-        $inQuote = false;
-        $len     = strlen($stmt);
+        $out = '';
+        $len = strlen($stmt);
         for ($i = 0; $i < $len; $i++) {
             $c = $stmt[$i];
-            if ($inQuote) {
-                if ($c === '\\') {
-                    $i++; // escaped char inside a quoted value
-                } elseif ($c === "'") {
-                    $inQuote = false;
+            if ($c === "'" || $c === '`') {
+                $closed = false;
+                for ($i++; $i < $len; $i++) {
+                    $d = $stmt[$i];
+                    if ($c === "'" && $d === '\\') {
+                        $i++; // escaped char inside a quoted value
+                    } elseif ($d === $c) {
+                        if ($i + 1 < $len && $stmt[$i + 1] === $c) {
+                            $i++; // doubled quote: still inside
+                        } else {
+                            $closed = true;
+                            break;
+                        }
+                    }
                 }
-            } elseif ($c === "'") {
-                $inQuote = true;
-            } elseif ($c === ';') {
-                return true;
+                if (!$closed) {
+                    return null;
+                }
+                $out .= $c . $c;
+            } elseif ($c === '"') {
+                return null;
+            } else {
+                $out .= $c;
             }
         }
 
-        return false;
+        return $out;
     }
 
     /**
