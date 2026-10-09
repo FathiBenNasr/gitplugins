@@ -5,6 +5,14 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-10-09
+
+Version bump only for the UI: reinstall after copying the files (`plugin:install`
+then `plugin:activate`), no schema change.
+
+### Fixed
+- Unreadable badges: every `bg-<colour>` badge (status, health, plan, catalog, discovered, install preflight, sources, targets) now carries Tabler's contrasting foreground class `text-<colour>-fg`, as GLPI 11 core does; the text was dark on a dark background.
+
 ## [1.0.4] - 2026-10-09
 
 Security release (October 2026 audit). **Reinstall required** after copying the

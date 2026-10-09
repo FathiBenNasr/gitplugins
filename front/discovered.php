@@ -168,10 +168,10 @@ $canUpd = Session::haveRight('plugin_gitplugins', UPDATE);
     <tbody>
 <?php
 $stateBadges = [
-    'marketplace' => '<span class="badge bg-purple">' . htmlspecialchars(__('marketplace', 'gitplugins')) . '</span>',
-    'managed'     => '<span class="badge bg-success">' . htmlspecialchars(__('managed', 'gitplugins')) . '</span>',
-    'declared'    => '<span class="badge bg-info">' . htmlspecialchars(__('declared', 'gitplugins')) . '</span>',
-    'none'        => '<span class="badge bg-secondary">' . htmlspecialchars(__('no source', 'gitplugins')) . '</span>',
+    'marketplace' => '<span class="badge bg-purple text-purple-fg">' . htmlspecialchars(__('marketplace', 'gitplugins')) . '</span>',
+    'managed'     => '<span class="badge bg-success text-success-fg">' . htmlspecialchars(__('managed', 'gitplugins')) . '</span>',
+    'declared'    => '<span class="badge bg-info text-info-fg">' . htmlspecialchars(__('declared', 'gitplugins')) . '</span>',
+    'none'        => '<span class="badge bg-secondary text-secondary-fg">' . htmlspecialchars(__('no source', 'gitplugins')) . '</span>',
 ];
 $any = false; foreach ($discovered as $d): $any = true;
     // Prefilled "Add source" link: always the key; the declared URL/name too.
@@ -183,12 +183,12 @@ $any = false; foreach ($discovered as $d): $any = true;
 ?>
       <tr>
         <td><strong><?= htmlspecialchars($d['name']) ?></strong> <code><?= htmlspecialchars($d['key']) ?></code>
-          <?= $d['private'] ? ' <span class="badge bg-warning">' . htmlspecialchars(__('private', 'gitplugins')) . '</span>' : '' ?>
+          <?= $d['private'] ? ' <span class="badge bg-warning text-warning-fg">' . htmlspecialchars(__('private', 'gitplugins')) . '</span>' : '' ?>
         </td>
         <td><?= htmlspecialchars($d['installed_version']) ?: '<span class="text-muted">—</span>' ?>
 <?php $ist = $installs[$d['key']] ?? []; if ((int) ($ist['update_available'] ?? 0) === 1):
     $av = (string) (($ist['available_version'] ?? '') !== '' ? $ist['available_version'] : ($ist['available_sha'] ?? '')); ?>
-          <br><span class="badge bg-info" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), $d['installed_version'] ?: '?', $av ?: '?')) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars(__('update available', 'gitplugins')) ?><?= $av !== '' ? ': ' . htmlspecialchars($av) : '' ?></span>
+          <br><span class="badge bg-info text-info-fg" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), $d['installed_version'] ?: '?', $av ?: '?')) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars(__('update available', 'gitplugins')) ?><?= $av !== '' ? ': ' . htmlspecialchars($av) : '' ?></span>
 <?php endif; ?>
         </td>
         <td><?= $stateBadges[$d['state']] ?? htmlspecialchars($d['state']) ?></td>

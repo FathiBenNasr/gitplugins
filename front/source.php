@@ -50,7 +50,7 @@ $rows = $DB->request([
         <td><code><?= htmlspecialchars((string) $s['plugin_key']) ?></code></td>
         <td><?= htmlspecialchars((string) $s['provider']) ?></td>
         <td><?= htmlspecialchars((string) $s['ref_policy']) ?><?= $s['ref'] ? ' <span class="text-muted">(' . htmlspecialchars((string) $s['ref']) . ')</span>' : '' ?></td>
-        <td><?= ((int) $s['is_active'] === 1) ? '<span class="badge bg-success">●</span>' : '<span class="badge bg-secondary">—</span>' ?></td>
+        <td><?= ((int) $s['is_active'] === 1) ? '<span class="badge bg-success text-success-fg">●</span>' : '<span class="badge bg-secondary text-secondary-fg">—</span>' ?></td>
         <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/install.php?id=' . (int) $s['id']) ?>"><?= htmlspecialchars(__('Install / Update', 'gitplugins')) ?></a></td>
       </tr>
 <?php endforeach; ?>

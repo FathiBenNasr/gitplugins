@@ -72,13 +72,13 @@ foreach ($sources as $s) {
       <tr<?= $hasUpdate ? ' class="table-warning"' : '' ?>>
         <td><code><?= htmlspecialchars((string) $s['plugin_key']) ?></code></td>
         <td><?= htmlspecialchars((string) ($i['installed_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
-        <td><?php if ($hasUpdate): ?><span class="badge bg-info" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), (string) ($i['installed_version'] ?? '?'), (string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : ($i['available_sha'] ?? '?')))) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars((string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : $i['available_sha'] ?? '')) ?></span><?php else: ?><?= htmlspecialchars((string) ($i['available_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?><?php endif; ?></td>
-        <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
+        <td><?php if ($hasUpdate): ?><span class="badge bg-info text-info-fg" title="<?= htmlspecialchars(sprintf(__('Update available: %1$s → %2$s', 'gitplugins'), (string) ($i['installed_version'] ?? '?'), (string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : ($i['available_sha'] ?? '?')))) ?>"><i class="ti ti-cloud-download"></i> <?= htmlspecialchars((string) (($i['available_version'] ?? '') !== '' ? $i['available_version'] : $i['available_sha'] ?? '')) ?></span><?php else: ?><?= htmlspecialchars((string) ($i['available_version'] ?? '')) ?: '<span class="text-muted">—</span>' ?><?php endif; ?></td>
+        <td><?= ($i['pending_action'] ?? 'none') !== 'none' ? '<span class="badge bg-info text-info-fg">' . htmlspecialchars((string) $i['pending_action']) . '</span>' : '—' ?></td>
         <td><?= htmlspecialchars((string) ($i['last_check_at'] ?? '')) ?></td>
         <td><?= htmlspecialchars((string) ($i['last_result'] ?? 'none')) ?><?= !empty($i['last_error']) ? ' <span class="text-danger" title="' . htmlspecialchars((string) $i['last_error']) . '">!</span>' : '' ?></td>
 <?php
         $health = (string) ($i['health'] ?? 'unknown');
-        $hbadge = ['ok' => 'bg-success', 'warn' => 'bg-warning', 'fail' => 'bg-danger', 'unknown' => 'bg-secondary'][$health] ?? 'bg-secondary';
+        $hbadge = ['ok' => 'bg-success text-success-fg', 'warn' => 'bg-warning text-warning-fg', 'fail' => 'bg-danger text-danger-fg', 'unknown' => 'bg-secondary text-secondary-fg'][$health] ?? 'bg-secondary text-secondary-fg';
 ?>
         <td><?php if (($i['health'] ?? '') !== ''): ?><span class="badge <?= $hbadge ?>"<?= !empty($i['health_detail']) ? ' title="' . htmlspecialchars((string) $i['health_detail']) . '"' : '' ?>><?= htmlspecialchars($health) ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?>
 <?php
@@ -88,7 +88,7 @@ foreach ($sources as $s) {
         if (is_array($hooks) && $hooks !== []):
             $htitle = implode("\n", PluginGitpluginsHookcheck::format((string) $s['plugin_key'], $hooks));
 ?>
-          <span class="badge bg-warning ms-1" title="<?= htmlspecialchars($htitle) ?>"><i class="ti ti-alert-triangle"></i> <?= htmlspecialchars(sprintf(_n('%d hook conflict', '%d hook conflicts', count($hooks), 'gitplugins'), count($hooks))) ?></span>
+          <span class="badge bg-warning text-warning-fg ms-1" title="<?= htmlspecialchars($htitle) ?>"><i class="ti ti-alert-triangle"></i> <?= htmlspecialchars(sprintf(_n('%d hook conflict', '%d hook conflicts', count($hooks), 'gitplugins'), count($hooks))) ?></span>
 <?php endif; ?>
 <?php
         // Phase 7: known-issue advisories for this plugin at its installed version
@@ -97,7 +97,7 @@ foreach ($sources as $s) {
         if ($ki !== []):
             $kititle = implode("\n", array_map(static fn (array $r): string => ($r['kind'] === 'advisory' ? '' : $r['kind'] . ' (' . $r['peer_key'] . '): ') . $r['message'], $ki));
 ?>
-          <span class="badge bg-danger ms-1" title="<?= htmlspecialchars($kititle) ?>"><i class="ti ti-alert-octagon"></i> <?= htmlspecialchars(sprintf(_n('%d known issue', '%d known issues', count($ki), 'gitplugins'), count($ki))) ?></span>
+          <span class="badge bg-danger text-danger-fg ms-1" title="<?= htmlspecialchars($kititle) ?>"><i class="ti ti-alert-octagon"></i> <?= htmlspecialchars(sprintf(_n('%d known issue', '%d known issues', count($ki), 'gitplugins'), count($ki))) ?></span>
 <?php endif; ?>
         </td>
         <td class="text-end">
