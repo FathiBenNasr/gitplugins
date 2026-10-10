@@ -467,27 +467,21 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
     }
 
     /**
-     * The digest's From: GLPI's own sender — `from_email`, else `admin_email`,
-     * the order of the core's Config::getEmailSender(). '' if neither is valid.
+     * The digest's From: GLPI's own sender, asked to the core's notification
+     * framework (Config::getEmailSender(): `from_email`, else `admin_email`)
+     * and never recomputed here. '' if the core has none valid.
      *
-     * WHY: `admin_email` is the administrator's personal address; the digest
-     * goes out through the service desk's SMTP account, and sending as a person
-     * from it is a forged sender the mail server's anti-spoofing rule refuses
-     * (SnappyMail §102, October 2026).
+     * WHY: owner's rule of 10 October 2026 — every plugin sends through GLPI's
+     * mail framework, under GLPI's identity. `admin_email` is the
+     * administrator's personal address; sending as a person through the
+     * service desk's SMTP account is a forged sender the mail server's
+     * anti-spoofing rule refuses (SnappyMail §102).
      */
     public static function digestSender(): string
     {
-        /** @var array $CFG_GLPI */
-        global $CFG_GLPI;
+        $sender = \Config::getEmailSender();
 
-        foreach (['from_email', 'admin_email'] as $key) {
-            $addr = self::cleanEmail((string) ($CFG_GLPI[$key] ?? ''));
-            if ($addr !== '') {
-                return $addr;
-            }
-        }
-
-        return '';
+        return self::cleanEmail((string) ($sender['email'] ?? ''));
     }
 
     /** Validate + CR/LF-strip an e-mail address (header-injection guard). '' if invalid. */

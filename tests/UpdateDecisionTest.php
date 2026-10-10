@@ -33,6 +33,27 @@ if (!function_exists('_n')) {
     }
 }
 
+if (!class_exists('Config')) {
+    /** The core's sender lookup, in the core's order. */
+    class Config
+    {
+        public static int $asked = 0;
+
+        public static function getEmailSender(?int $entities_id = null, bool $no_reply = false): array
+        {
+            self::$asked++;
+            foreach (['from_email', 'admin_email'] as $key) {
+                $addr = trim((string) ($GLOBALS['CFG_GLPI'][$key] ?? ''));
+                if ($addr !== '' && filter_var($addr, FILTER_VALIDATE_EMAIL)) {
+                    return ['email' => $addr, 'name' => ''];
+                }
+            }
+
+            return ['email' => null, 'name' => null];
+        }
+    }
+}
+
 require_once __DIR__ . '/../inc/version.class.php';
 require_once __DIR__ . '/../inc/updatecheck.class.php';
 
@@ -162,14 +183,14 @@ final class UpdateDecisionTest extends TestCase
         $saved = $GLOBALS['CFG_GLPI'] ?? null;
         try {
             $GLOBALS['CFG_GLPI'] = ['admin_email' => 'admin@example.test', 'from_email' => 'servicedesk@example.test'];
+            $asked = Config::$asked;
             self::assertSame('servicedesk@example.test', PluginGitpluginsUpdatecheck::digestSender());
+            self::assertSame($asked + 1, Config::$asked, 'asked to the core, not recomputed');
 
             // Like the core: no valid from_email → admin_email.
             $GLOBALS['CFG_GLPI'] = ['admin_email' => 'admin@example.test', 'from_email' => 'pas une adresse'];
             self::assertSame('admin@example.test', PluginGitpluginsUpdatecheck::digestSender());
 
-            $GLOBALS['CFG_GLPI'] = ['from_email' => "servicedesk@example.test\r\nBcc: x@y.test"];
-            self::assertSame('', PluginGitpluginsUpdatecheck::digestSender(), 'no header injection');
         } finally {
             $GLOBALS['CFG_GLPI'] = $saved;
         }

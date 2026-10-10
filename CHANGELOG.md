@@ -5,6 +5,14 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-10-10
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
+schema change.
+
+### Changed
+- The digest's `From:` is asked to the core's notification framework (`Config::getEmailSender()`) instead of being recomputed by the plugin. Owner's rule of 10 October 2026: every plugin sends through GLPI's mail framework, under GLPI's identity.
+
 ## [1.0.6] - 2026-10-10
 
 Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
