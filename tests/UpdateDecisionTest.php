@@ -155,4 +155,23 @@ final class UpdateDecisionTest extends TestCase
         self::assertSame('Bearer tok', PluginGitpluginsUpdatecheck::apiHeaders('tok')['Authorization']);
         self::assertSame('application/json', PluginGitpluginsUpdatecheck::apiHeaders('tok')['Accept']);
     }
+
+    // ---- digest From: GLPI's sender, never the administrator's own address ----
+    public function testDigestSenderIsGlpiFromEmail(): void
+    {
+        $saved = $GLOBALS['CFG_GLPI'] ?? null;
+        try {
+            $GLOBALS['CFG_GLPI'] = ['admin_email' => 'admin@example.test', 'from_email' => 'servicedesk@example.test'];
+            self::assertSame('servicedesk@example.test', PluginGitpluginsUpdatecheck::digestSender());
+
+            // Like the core: no valid from_email → admin_email.
+            $GLOBALS['CFG_GLPI'] = ['admin_email' => 'admin@example.test', 'from_email' => 'pas une adresse'];
+            self::assertSame('admin@example.test', PluginGitpluginsUpdatecheck::digestSender());
+
+            $GLOBALS['CFG_GLPI'] = ['from_email' => "servicedesk@example.test\r\nBcc: x@y.test"];
+            self::assertSame('', PluginGitpluginsUpdatecheck::digestSender(), 'no header injection');
+        } finally {
+            $GLOBALS['CFG_GLPI'] = $saved;
+        }
+    }
 }

@@ -5,6 +5,14 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-10-10
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
+schema change.
+
+### Fixed
+- **Forged sender on the update digest.** The digest's `From:` was GLPI's `admin_email` — the administrator's personal address — while the mail goes out through the service desk's SMTP account; the mail server's anti-spoofing rule counts this as a forged sender. It is now GLPI's own sender, in the core's order: `from_email`, else `admin_email`. The recipients are unchanged.
+
 ## [1.0.5] - 2026-10-09
 
 Version bump only for the UI: reinstall after copying the files (`plugin:install`
