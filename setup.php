@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_GITPLUGINS_VERSION', '1.1.2');
+define('PLUGIN_GITPLUGINS_VERSION', '1.1.3');
 // GLPI 11 only — uses the namespaced plugin API; outbound HTTP via ext-curl (inc/httpclient.class.php).
 define('PLUGIN_GITPLUGINS_MIN_GLPI', '12.0.0');
 define('PLUGIN_GITPLUGINS_MAX_GLPI', '12.99.99');

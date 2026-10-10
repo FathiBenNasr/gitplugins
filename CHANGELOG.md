@@ -5,6 +5,14 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-10-10
+
+GLPI 12 line: carries 1.0.6 and 1.0.7 of the GLPI 11 line (below). Reinstall
+after copying the files, no schema change.
+
+### Changed
+- The update digest's `From:` is GLPI's sender, asked to the core's notification framework (`Config::getEmailSender()`); it used to be `admin_email`, the administrator's personal address, sent through the service desk's SMTP account — a forged sender for the mail server.
+
 ## [1.1.2] - 2026-10-09
 
 GLPI 12 line: carries the readable-badge fix of 1.0.5 below. Reinstall after copying the files (`plugin:install` then `plugin:activate`), no schema change.
@@ -19,6 +27,21 @@ Security release for the GLPI 12 line: carries every fix of 1.0.4 below (October
 - **Requires GLPI 12.0** (min 12.0.0, max 12.99.99); the 11.x line stays on the previous minor.
 - Class properties inherited from GLPI carry the native types GLPI 12 declares (`public static string $rightname`, …): an untyped redeclaration is a compile error that takes the whole GLPI instance down.
 - CSRF: no more `_glpi_csrf_token` fields, `Session::getNewCSRFToken()`/`checkCSRF()` calls or `X-Glpi-Csrf-Token` headers. GLPI 12 validates the browser's `Sec-Fetch-Site`/`Origin` headers instead.
+## [1.0.7] - 2026-10-10
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
+schema change.
+
+### Changed
+- The digest's `From:` is asked to the core's notification framework (`Config::getEmailSender()`) instead of being recomputed by the plugin. Owner's rule of 10 October 2026: every plugin sends through GLPI's mail framework, under GLPI's identity.
+
+## [1.0.6] - 2026-10-10
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
+schema change.
+
+### Fixed
+- **Forged sender on the update digest.** The digest's `From:` was GLPI's `admin_email` — the administrator's personal address — while the mail goes out through the service desk's SMTP account; the mail server's anti-spoofing rule counts this as a forged sender. It is now GLPI's own sender, in the core's order: `from_email`, else `admin_email`. The recipients are unchanged.
 
 ## [1.0.5] - 2026-10-09
 
