@@ -145,6 +145,30 @@ final class PluginGitpluginsRollback
     }
 
     /**
+     * The managed source and plugin key a snapshot belongs to: [sourceId, key],
+     * or [0, ''] when the snapshot does not exist. Lets a caller check the
+     * ROW-level right (entity) before restoring anything.
+     *
+     * @return array{0:int,1:string}
+     */
+    public static function ownerOf(int $snapshotId): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $row = $DB->request([
+            'FROM'  => 'glpi_plugin_gitplugins_snapshots',
+            'WHERE' => ['id' => $snapshotId],
+            'LIMIT' => 1,
+        ])->current();
+        if ($row === null) {
+            return [0, ''];
+        }
+
+        return [(int) ($row['plugin_gitplugins_sources_id'] ?? 0), (string) ($row['plugin_key'] ?? '')];
+    }
+
+    /**
      * Retained snapshots for a plugin, NEWEST FIRST (for the status UI).
      *
      * @return array<int,array<string,mixed>>

@@ -63,7 +63,72 @@ final class PluginGitpluginsInstaller
         }
         $confirmedSha = strtolower(trim($confirmedSha));
 
-        return $confirmedSha === '' || $confirmedSha === strtolower(trim((string) ($resolved['sha'] ?? '')));
+        return $confirmedSha === '' || $confirmedSha === self::reviewedSha($resolved);
+    }
+
+    /**
+     * PURE: the commit SHA the admin reviews and the cron installs — the branch
+     * head / pinned SHA when the policy has one, else the commit a tag pointed
+     * to when it was resolved ('' when the forge gave none).
+     *
+     * @param array{sha?:string,tag_sha?:string} $resolved
+     */
+    public static function reviewedSha(array $resolved): string
+    {
+        $sha = strtolower(trim((string) ($resolved['sha'] ?? '')));
+
+        return $sha !== '' ? $sha : strtolower(trim((string) ($resolved['tag_sha'] ?? '')));
+    }
+
+    /**
+     * PURE: compare what is about to be installed with the fingerprint recorded
+     * at the previous install of the SAME tag (re-tag / swapped release asset).
+     *
+     * Returns 'ok' (first sight, a different tag, or identical content),
+     * 'moved' (same tag, different content) or 'unverifiable' (same tag, a
+     * fingerprint was recorded but this run could not obtain the matching one —
+     * fail closed). A null argument means "this policy has no such fingerprint".
+     *
+     * @param array<string,mixed> $installRow the installs row ([] if none)
+     */
+    public static function fingerprintVerdict(array $installRow, string $tag, ?string $commitSha, ?string $assetSha): string
+    {
+        $storedTag = trim((string) ($installRow['installed_tag'] ?? ''));
+        if ($tag === '' || $storedTag === '' || $storedTag !== $tag) {
+            return 'ok';
+        }
+        $storedCommit = strtolower(trim((string) ($installRow['installed_sha'] ?? '')));
+        if ($commitSha !== null && $storedCommit !== '') {
+            $commitSha = strtolower(trim($commitSha));
+            if ($commitSha === '') {
+                return 'unverifiable';
+            }
+            if (!hash_equals($storedCommit, $commitSha)) {
+                return 'moved';
+            }
+        }
+        $storedAsset = strtolower(trim((string) ($installRow['installed_asset_sha256'] ?? '')));
+        if ($assetSha !== null && $storedAsset !== '') {
+            $assetSha = strtolower(trim($assetSha));
+            if ($assetSha === '') {
+                return 'unverifiable';
+            }
+            if (!hash_equals($storedAsset, $assetSha)) {
+                return 'moved';
+            }
+        }
+
+        return 'ok';
+    }
+
+    /** The message recorded (and shown to the admin) when a fingerprint check refuses an install. */
+    public static function fingerprintMessage(string $verdict, string $tag): string
+    {
+        $tag = mb_substr(str_replace(["\r", "\n", "\0"], '', $tag), 0, 80);
+
+        return $verdict === 'unverifiable'
+            ? "tag_unverifiable: the content of tag '{$tag}' could not be checked against the installed one. Refused; try again later."
+            : "tag_moved: tag '{$tag}' now points to different content than the version installed (re-tag). Refused; review the source and publish a new tag.";
     }
 
     /**
@@ -102,7 +167,7 @@ final class PluginGitpluginsInstaller
      * native install/activate. Live-box only (network + FS + core seam). Records
      * the audit trail and updates the installs row. Returns true on success.
      */
-    public static function run(array $source, string $resolvedRef, string $resolvedSha = ''): bool
+    public static function run(array $source, string $resolvedRef, string $resolvedSha = '', string $tag = ''): bool
     {
         /** @var DBmysql $DB */
         global $DB;
@@ -131,6 +196,23 @@ final class PluginGitpluginsInstaller
         $provider = (string) ($source['provider'] ?? 'unknown');
         $isLocal  = $provider === 'local';
 
+        // Content fingerprint (tag policies and release): what was installed for
+        // a tag is remembered, and the same tag now pointing elsewhere is refused.
+        $fpRow = self::installsRow($key);
+        $fpTag = '';
+        if (!$isLocal && in_array($policy, ['latest_tag', 'pin_tag'], true)) {
+            $fpTag = trim($tag) !== '' ? trim($tag) : (PluginGitpluginsRefResolver::isSha($resolvedRef) ? '' : trim($resolvedRef));
+            // WHY: a tag is mutable. If the tag we installed earlier now resolves to
+            // another commit (or its commit cannot be resolved), the "same version"
+            // is not the same code: stop before anything is downloaded.
+            $verdict = self::fingerprintVerdict($fpRow, $fpTag, $resolvedSha, null);
+            if ($verdict !== 'ok') {
+                self::fail($sourceId, $key, self::fingerprintMessage($verdict, $fpTag));
+
+                return false;
+            }
+        }
+
         // LOCAL source (Phase 1): no fetch — the archive URL is irrelevant. Gate
         // hard (feature flag OFF by default + path allowlist); the actual acquire
         // (copy into the staged dir) happens inside the try below.
@@ -152,7 +234,7 @@ final class PluginGitpluginsInstaller
             // SSRF-guarded); for every other policy we build the git source-
             // tarball URL (pure).
             try {
-                [$archiveUrl] = PluginGitpluginsFetcher::resolveReleaseAsset(
+                [$archiveUrl, $releaseTag] = PluginGitpluginsFetcher::resolveReleaseAsset(
                     (string) ($source['provider'] ?? 'unknown'),
                     (string) ($source['url'] ?? ''),
                     $resolvedRef,
@@ -165,6 +247,7 @@ final class PluginGitpluginsInstaller
 
                 return false;
             }
+            $fpTag = trim((string) $releaseTag) !== '' ? trim((string) $releaseTag) : trim($resolvedRef);
         } else {
             $built = self::archiveFor($source, $resolvedRef);
             if ($built === null) {
@@ -175,8 +258,9 @@ final class PluginGitpluginsInstaller
             [$archiveUrl] = $built;
         }
 
-        $archive = null;
-        $staged  = null;
+        $archive  = null;
+        $staged   = null;
+        $assetSha = '';
         try {
             // Acquire the staged tree. LOCAL: copy the (allowlisted) path in, no
             // network. Otherwise: SSRF-guarded fetch → sanitised extract.
@@ -196,10 +280,26 @@ final class PluginGitpluginsInstaller
                     $cfg->getFetchTimeoutSeconds()
                 );
 
+                // Release assets are fingerprinted by the SHA-256 of the file
+                // actually downloaded; a tag's asset replaced under the same tag
+                // is refused before it is opened.
+                if ($policy === 'release') {
+                    $assetSha = (string) hash_file('sha256', $archive);
+                    $verdict  = self::fingerprintVerdict($fpRow, $fpTag, null, $assetSha);
+                    if ($verdict !== 'ok') {
+                        throw new \RuntimeException(self::fingerprintMessage($verdict, $fpTag));
+                    }
+                }
+
                 // Capture the outgoing version to label the neutralised backup.
                 $priorVersion = self::installedVersion($key);
 
-                $staged = PluginGitpluginsExtractor::extractTo($archive, $key);
+                $staged = PluginGitpluginsExtractor::extractTo(
+                    $archive,
+                    $key,
+                    PluginGitpluginsExtractor::MAX_ENTRIES,
+                    $cfg->getMaxExtractBytes()
+                );
             }
             $pluginsBase = self::pluginsDir();
 
@@ -353,6 +453,9 @@ final class PluginGitpluginsInstaller
                 'plugin_gitplugins_sources_id' => $sourceId,
                 'installed_version'            => $installedVersion,
                 'installed_sha'                => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
+                // Fingerprint of what was just installed (see fingerprintVerdict).
+                'installed_tag'                => ($fpTag !== '' && ($resolvedSha !== '' || $assetSha !== '')) ? mb_substr($fpTag, 0, 255) : null,
+                'installed_asset_sha256'       => $assetSha !== '' ? $assetSha : null,
                 'available_version'            => $installedVersion !== '' ? mb_substr($installedVersion, 0, 64) : null,
                 'available_sha'                => $resolvedSha !== '' ? mb_substr($resolvedSha, 0, 64) : null,
                 'update_available'             => 0,
@@ -526,6 +629,47 @@ final class PluginGitpluginsInstaller
             'last_error'                   => mb_substr($reason, 0, 255),
         ], ['plugin_key' => $key]);
         PluginGitpluginsLog::record($sourceId, 'install', 'error', $reason);
+    }
+
+    /**
+     * The install-state row of a plugin key ([] when none).
+     *
+     * @return array<string,mixed>
+     */
+    private static function installsRow(string $key): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        return $DB->request([
+            'FROM'  => 'glpi_plugin_gitplugins_installs',
+            'WHERE' => ['plugin_key' => $key],
+            'LIMIT' => 1,
+        ])->current() ?: [];
+    }
+
+    /**
+     * The availability recorded by the last cron check for a plugin key — a
+     * pure database read, no network. Used by the read-only confirm view.
+     *
+     * @return array{ref:string,version:string,sha:string}
+     */
+    public static function cachedAvailability(string $key): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $row = $DB->request([
+            'FROM'  => 'glpi_plugin_gitplugins_installs',
+            'WHERE' => ['plugin_key' => $key],
+            'LIMIT' => 1,
+        ])->current() ?: [];
+
+        return [
+            'ref'     => '',
+            'version' => (string) ($row['available_version'] ?? ''),
+            'sha'     => (string) ($row['available_sha'] ?? ''),
+        ];
     }
 
     /** Read the installed version of a plugin from glpi_plugins (READ-only). */

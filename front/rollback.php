@@ -28,6 +28,18 @@ if ($snapshotId <= 0) {
     Html::redirect($root . '/front/status.php');
 }
 
+// WHY: a right on the itemtype is not a right on this row. The snapshot belongs
+// to a source (and so to an entity): the session must be allowed to act on that
+// source, as install.php and source.form.php require. Fail closed: a snapshot
+// with no live source, or whose source manages another plugin, is refused.
+[$ownerSourceId, $ownerKey] = PluginGitpluginsRollback::ownerOf($snapshotId);
+$ownerSource = new PluginGitpluginsSource();
+if ($ownerSourceId <= 0
+    || !$ownerSource->can($ownerSourceId, UPDATE)
+    || (string) ($ownerSource->fields['plugin_key'] ?? '') !== $ownerKey) {
+    throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+}
+
 $pluginsBase = PluginGitpluginsInstaller::pluginsDir();
 if (PluginGitpluginsRollback::to($snapshotId, $pluginsBase)) {
     Session::addMessageAfterRedirect(__('Rolled back to the selected snapshot.', 'gitplugins'));

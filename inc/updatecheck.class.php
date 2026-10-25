@@ -68,14 +68,19 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             // A job confirmed on install.php carries the reviewed ref/SHA: install
             // exactly that. Only legacy rows queued without a pin re-resolve.
             $policy   = (string) ($src->fields['ref_policy'] ?? 'latest_tag');
-            $resolved = self::hasPin($row) ? [] : self::resolveLatest($src->fields, $cfg);
+            $needsLookup = !self::hasPin($row)
+                || (trim((string) ($row['pending_sha'] ?? '')) === '' && in_array($policy, ['latest_tag', 'pin_tag'], true));
+            $resolved = $needsLookup
+                ? self::resolveLatest($src->fields, $cfg)
+                : [];
+            $row      = self::completePin($row, $resolved, $policy);
             $target   = self::pinnedTarget($row, $resolved, $policy, (string) ($src->fields['ref'] ?? ''));
             if ($target['ref'] === '' && $policy !== 'release') {
                 continue;
             }
             // run() clears pending_action and records the outcome; each install is
             // independently verified and rolled back on failure.
-            PluginGitpluginsInstaller::run($src->fields, $target['ref'], $target['sha']);
+            PluginGitpluginsInstaller::run($src->fields, $target['ref'], $target['sha'], self::targetTag($row, $resolved, (string) ($src->fields['ref'] ?? '')));
             $task->addVolume(1);
             $did++;
         }
@@ -154,12 +159,13 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
                 // (nothing on disk) always proceeds.
                 // A confirmed job is pinned: it proceeds on the reviewed commit even
                 // if the branch moved since (that is exactly what was approved).
+                $row     = self::completePin($row, $resolved, (string) ($src['ref_policy'] ?? 'latest_tag'));
                 $proceed = $pending === 'install' || $installed === '' || $updateAvail || self::hasPin($row);
                 $target  = self::pinnedTarget($row, $resolved, (string) ($src['ref_policy'] ?? 'latest_tag'), (string) ($src['ref'] ?? ''));
                 if ($proceed && ($target['ref'] !== '' || (string) ($src['ref_policy'] ?? '') === 'release')) {
                     // run() clears pending_action back to 'none' and records the new
                     // installed sha/version, so the next check is stable.
-                    PluginGitpluginsInstaller::run($src, $target['ref'], $target['sha']);
+                    PluginGitpluginsInstaller::run($src, $target['ref'], $target['sha'], self::targetTag($row, $resolved, (string) ($src['ref'] ?? '')));
                     $did++;
                 } elseif (!$proceed) {
                     // Nothing to do → clear the stale pending flag so we don't retry.
@@ -229,8 +235,58 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return ['ref' => PluginGitpluginsRefResolver::pinnedFetchRef($policy, $ref, $sha), 'sha' => $sha];
         }
         $ref = (string) ($resolved['ref'] ?? '');
+        $sha = (string) ($resolved['sha'] ?? '');
+        // Tag policies: fetch the commit the tag pointed to when it was resolved,
+        // not the tag name again (a re-tag between the two cannot slip in).
+        $tagSha = strtolower(trim((string) ($resolved['tag_sha'] ?? '')));
+        if ($sha === '' && $tagSha !== '' && $ref !== '') {
+            return ['ref' => PluginGitpluginsRefResolver::pinnedFetchRef($policy, $ref, $tagSha), 'sha' => $tagSha];
+        }
 
-        return ['ref' => $ref !== '' ? $ref : $sourceRef, 'sha' => (string) ($resolved['sha'] ?? '')];
+        return ['ref' => $ref !== '' ? $ref : $sourceRef, 'sha' => $sha];
+    }
+
+    /**
+     * PURE: a queued tag job that carries a ref but no commit (queued by the
+     * bulk plan, which has no review screen) gets the commit the tag resolves to
+     * NOW, provided the resolver still names the same tag. WHY: the installer
+     * needs a commit to fetch and to fingerprint; without it a tag installed
+     * through the bulk path would leave nothing to detect a later re-tag with.
+     *
+     * @param array<string,mixed>                                $installRow
+     * @param array{ref?:string,sha?:string,tag_sha?:string}     $resolved
+     * @return array<string,mixed> the row, with pending_sha filled when it can be
+     */
+    public static function completePin(array $installRow, array $resolved, string $policy): array
+    {
+        if (!in_array($policy, ['latest_tag', 'pin_tag'], true)
+            || trim((string) ($installRow['pending_ref'] ?? '')) === ''
+            || trim((string) ($installRow['pending_sha'] ?? '')) !== '') {
+            return $installRow;
+        }
+        $tagSha = strtolower(trim((string) ($resolved['tag_sha'] ?? '')));
+        if ($tagSha !== '' && trim((string) ($resolved['ref'] ?? '')) === trim((string) $installRow['pending_ref'])) {
+            $installRow['pending_sha'] = $tagSha;
+        }
+
+        return $installRow;
+    }
+
+    /**
+     * PURE: the tag NAME a queued job targets (the fetch ref may be a commit
+     * SHA, see pinnedTarget) — what the installer compares to the recorded
+     * fingerprint.
+     *
+     * @param array<string,mixed>            $installRow
+     * @param array{ref?:string,sha?:string} $resolved
+     */
+    public static function targetTag(array $installRow, array $resolved, string $sourceRef = ''): string
+    {
+        $tag = self::hasPin($installRow)
+            ? trim((string) ($installRow['pending_ref'] ?? ''))
+            : trim((string) ($resolved['ref'] ?? ''));
+
+        return $tag !== '' ? $tag : trim($sourceRef);
     }
 
     /** Fetch the install-state row for a plugin key (keyed lookup). [] if none. */
@@ -569,7 +625,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
      * policy. Network step (SSRF-guarded) only for latest_tag; the pinned policies
      * are pure. Returns ['ref'=>..,'version'=>..,'sha'=>..].
      *
-     * @return array{ref:string,version:string,sha:string}
+     * @return array{ref:string,version:string,sha:string,tag_sha?:string}
      */
     public static function resolveLatest(array $src, PluginGitpluginsConfig $cfg): array
     {
@@ -585,11 +641,24 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return ['ref' => 'local', 'version' => self::localVersion($url, $cfg), 'sha' => ''];
         }
 
-        if ($policy === 'pin_sha' || $policy === 'pin_tag') {
+        if ($policy === 'pin_tag') {
+            // WHY: a tag is mutable. Resolve the commit it points to NOW so the
+            // admin reviews, the cron fetches and the installer records that
+            // commit, not whatever the tag names tomorrow.
+            $map = self::fetchTagMap($provider, $url, $cfg, self::sourceToken($src));
+
             return [
                 'ref'     => $ref,
                 'version' => PluginGitpluginsVersion::normalise($ref),
-                'sha'     => $policy === 'pin_sha' ? $ref : '',
+                'sha'     => '',
+                'tag_sha' => $map[$ref] ?? '',
+            ];
+        }
+        if ($policy === 'pin_sha') {
+            return [
+                'ref'     => $ref,
+                'version' => PluginGitpluginsVersion::normalise($ref),
+                'sha'     => $ref,
             ];
         }
 
@@ -617,13 +686,15 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         }
 
         // latest_tag → query the host tags API (SSRF-guarded), pick the highest.
-        $tags = self::fetchTags($provider, $url, $cfg, self::sourceToken($src));
-        $best = PluginGitpluginsVersion::highest($tags);
+        $map  = self::fetchTagMap($provider, $url, $cfg, self::sourceToken($src));
+        $best = PluginGitpluginsVersion::highest(array_map('strval', array_keys($map)));
         if ($best === null) {
             return ['ref' => $ref, 'version' => '', 'sha' => ''];
         }
 
-        return ['ref' => $best, 'version' => PluginGitpluginsVersion::normalise($best), 'sha' => ''];
+        // 'sha' stays empty on purpose (update detection compares versions for
+        // tags); 'tag_sha' is the commit the tag points to, for pinning.
+        return ['ref' => $best, 'version' => PluginGitpluginsVersion::normalise($best), 'sha' => '', 'tag_sha' => $map[$best] ?? ''];
     }
 
     /**
@@ -651,12 +722,13 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
     }
 
     /**
-     * Fetch the tag names from a host's API (SSRF-guarded, proxy-aware). Live-box
+     * Fetch the tags of a repository from the host's API (SSRF-guarded,
+     * proxy-aware) as name => commit SHA ('' when the API gave none). Live-box
      * only; returns [] on any failure (treated as "no update info").
      *
-     * @return string[]
+     * @return array<string,string>
      */
-    private static function fetchTags(string $provider, string $url, PluginGitpluginsConfig $cfg, string $token = ''): array
+    private static function fetchTagMap(string $provider, string $url, PluginGitpluginsConfig $cfg, string $token = ''): array
     {
         $api = PluginGitpluginsRefResolver::tagsApiUrl($provider, $url);
         if ($api === null) {
@@ -678,9 +750,9 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             }
             $tags = [];
             foreach ($data as $entry) {
-                // GitHub/Gitea/Forgejo: {name: "v1.2.3"}; GitLab: {name: "v1.2.3"}.
+                // GitHub/Gitea/Forgejo: {name: "v1.2.3", commit: {...}}; GitLab likewise.
                 if (is_array($entry) && !empty($entry['name'])) {
-                    $tags[] = (string) $entry['name'];
+                    $tags[(string) $entry['name']] = PluginGitpluginsRefResolver::tagCommitSha($entry);
                 }
             }
 

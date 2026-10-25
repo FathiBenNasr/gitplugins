@@ -46,6 +46,10 @@ $csrf   = Session::getNewCSRFToken();
         <input type="number" class="form-control" name="max_download_mb" min="1" max="500" value="<?= (int) $config->getMaxDownloadMb() ?>">
       </div>
       <div class="col-md-4 mb-3">
+        <label class="form-label"><?= htmlspecialchars(__('Max unpacked size (MB)', 'gitplugins')) ?></label>
+        <input type="number" class="form-control" name="max_extract_mb" min="16" max="1024" value="<?= (int) $config->getMaxExtractMb() ?>">
+      </div>
+      <div class="col-md-4 mb-3">
         <label class="form-label"><?= htmlspecialchars(__('Fetch timeout (seconds)', 'gitplugins')) ?></label>
         <input type="number" class="form-control" name="fetch_timeout_seconds" min="5" max="300" value="<?= (int) $config->getFetchTimeoutSeconds() ?>">
       </div>

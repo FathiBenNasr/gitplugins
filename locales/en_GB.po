@@ -411,3 +411,15 @@ msgstr "This plugin is managed by the GLPI marketplace; update it from the marke
 #, c-format
 msgid "The shared secret must be at least %d characters long."
 msgstr "The shared secret must be at least %d characters long."
+
+msgid "Max unpacked size (MB)"
+msgstr "Max unpacked size (MB)"
+
+msgid "This plugin key is already managed by another source."
+msgstr "This plugin key is already managed by another source."
+
+msgid "Review install / update"
+msgstr "Review install / update"
+
+msgid "Showing the state of the last check. Reviewing contacts the source to resolve the exact ref."
+msgstr "Showing the state of the last check. Reviewing contacts the source to resolve the exact ref."

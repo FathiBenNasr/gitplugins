@@ -33,7 +33,11 @@ if ($id <= 0 || !$src->getFromDB($id) || !$src->canViewItem()) {
 }
 $source = $src->fields;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// A POST carrying "review" only OPENS the confirm screen (network lookups, see
+// below); every other POST is the confirmed queue request.
+$reviewing = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$reviewing) {
     Session::checkRight('plugin_gitplugins', UPDATE);
     // WHY: a right on the itemtype is not a right on this row — can() applies
     // the source's entity too (a source of another entity cannot be queued).
@@ -86,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'last_error'                   => null,
         // Pin the reviewed target: the cron installs THIS ref/commit (L-8).
         'pending_ref'                  => mb_substr((string) ($resolved['ref'] ?? ''), 0, 255) ?: null,
-        'pending_sha'                  => mb_substr((string) ($resolved['sha'] ?? ''), 0, 64) ?: null,
+        'pending_sha'                  => mb_substr(PluginGitpluginsInstaller::reviewedSha($resolved), 0, 64) ?: null,
     ], ['plugin_key' => (string) $source['plugin_key']]);
     PluginGitpluginsLog::record($id, 'enqueue', 'ok', $decision . ' ' . $source['plugin_key'], (string) ($resolved['ref'] ?? ''));
 
@@ -95,7 +99,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $installed = PluginGitpluginsInstaller::installedVersion((string) $source['plugin_key']);
-$resolved  = PluginGitpluginsUpdatecheck::resolveLatest($source, PluginGitpluginsConfig::singleton());
+$canQueue  = Session::haveRight('plugin_gitplugins', UPDATE) && $src->can($id, UPDATE);
+
+if ($reviewing) {
+    // WHY: resolving the latest ref and the changelog calls the forge WITH the
+    // source's token. A plain GET (a reader reloading the page in a loop) must
+    // never trigger that: only a POST by someone allowed to queue the job does.
+    if (!$canQueue) {
+        throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+    }
+    $resolved = PluginGitpluginsUpdatecheck::resolveLatest($source, PluginGitpluginsConfig::singleton());
+} else {
+    // Read-only view: the state recorded by the last cron check, no network.
+    $resolved = PluginGitpluginsInstaller::cachedAvailability((string) $source['plugin_key']);
+}
 
 Html::header(PluginGitpluginsSource::getMenuName(), $root . '/front/install.php', 'config', 'PluginGitpluginsSource');
 $csrf = Session::getNewCSRFToken();
@@ -104,8 +121,12 @@ $csrf = Session::getNewCSRFToken();
 <form method="post" action="<?= htmlspecialchars($root . '/front/install.php') ?>" class="card mt-3">
   <input type="hidden" name="_glpi_csrf_token" value="<?= htmlspecialchars($csrf) ?>">
   <input type="hidden" name="id" value="<?= (int) $id ?>">
+<?php if ($reviewing): ?>
   <input type="hidden" name="confirm_ref" value="<?= htmlspecialchars((string) ($resolved['ref'] ?? '')) ?>">
-  <input type="hidden" name="confirm_sha" value="<?= htmlspecialchars((string) ($resolved['sha'] ?? '')) ?>">
+  <input type="hidden" name="confirm_sha" value="<?= htmlspecialchars(PluginGitpluginsInstaller::reviewedSha($resolved)) ?>">
+<?php elseif ($canQueue): ?>
+  <input type="hidden" name="review" value="1">
+<?php endif; ?>
   <div class="card-header"><h3 class="card-title mb-0"><?= htmlspecialchars(__('Confirm install / update', 'gitplugins')) ?></h3></div>
   <div class="card-body">
     <div class="alert alert-warning"><i class="ti ti-alert-triangle"></i>
@@ -115,7 +136,7 @@ $csrf = Session::getNewCSRFToken();
       <dt class="col-sm-4"><?= htmlspecialchars(__('Plugin key', 'gitplugins')) ?></dt><dd class="col-sm-8"><code><?= htmlspecialchars((string) $source['plugin_key']) ?></code></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Source URL', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) $source['url']) ?></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Resolved ref', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) ($resolved['ref'] ?? '')) ?: '<span class="text-muted">—</span>' ?></dd>
-      <dt class="col-sm-4"><?= htmlspecialchars(__('Commit SHA', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) ($resolved['sha'] ?? '')) ?: '<span class="text-muted">' . htmlspecialchars(__('resolved at fetch', 'gitplugins')) . '</span>' ?></dd>
+      <dt class="col-sm-4"><?= htmlspecialchars(__('Commit SHA', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars(PluginGitpluginsInstaller::reviewedSha($resolved)) ?: '<span class="text-muted">' . htmlspecialchars(__('resolved at fetch', 'gitplugins')) . '</span>' ?></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Installed version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars($installed ?: __('not installed', 'gitplugins')) ?></dd>
       <dt class="col-sm-4"><?= htmlspecialchars(__('Available version', 'gitplugins')) ?></dt><dd class="col-sm-8"><?= htmlspecialchars((string) ($resolved['version'] ?? '')) ?: '<span class="text-muted">—</span>' ?></dd>
     </dl>
@@ -174,12 +195,12 @@ $csrf = Session::getNewCSRFToken();
     // "what a click will change". Best-effort; silent when none is found. Rendered
     // as escaped preformatted text (NOT raw HTML) — this is untrusted upstream
     // content, so it must never be injected as markup.
-    $changelog = PluginGitpluginsChangelog::fetchFor(
+    $changelog = $reviewing ? PluginGitpluginsChangelog::fetchFor(
         $source,
         (string) ($resolved['ref'] ?? ''),
         $installed,
         (string) ($resolved['version'] ?? '')
-    );
+    ) : '';
     if (trim($changelog) !== ''):
 ?>
     <hr>
@@ -191,7 +212,12 @@ $csrf = Session::getNewCSRFToken();
 <?php endif; ?>
   </div>
   <div class="card-footer d-flex gap-2">
+<?php if ($reviewing): ?>
     <button type="submit" class="btn btn-primary" onclick="<?= PluginGitpluginsUi::confirmAttr(__('Queue this install/update?', 'gitplugins')) ?>"><?= htmlspecialchars(__('Queue install / update', 'gitplugins')) ?></button>
+<?php elseif ($canQueue): ?>
+    <div class="form-text me-auto"><?= htmlspecialchars(__('Showing the state of the last check. Reviewing contacts the source to resolve the exact ref.', 'gitplugins')) ?></div>
+    <button type="submit" class="btn btn-primary"><?= htmlspecialchars(__('Review install / update', 'gitplugins')) ?></button>
+<?php endif; ?>
     <a class="btn btn-outline-secondary" href="<?= htmlspecialchars($root . '/front/source.php') ?>"><?= htmlspecialchars(__('Cancel', 'gitplugins')) ?></a>
   </div>
 </form>

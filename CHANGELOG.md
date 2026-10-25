@@ -5,6 +5,20 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-10-25
+
+Hardening release. Reinstall after copying the files (`plugin:install` then
+`plugin:activate`): it adds two columns to the install-state table and one to the
+configuration table.
+
+### Security
+- **Archive opening is bounded.** A downloaded archive is recognised by its content (zip, tar or tar.gz only; rar, 7z, iso and anything else are refused), a tar.gz is inflated through a bounded stream before the archive library sees it, and every entry is copied in small chunks with a per-entry cap (32 MiB) and a total cap. A few-megabyte tar.gz that expands to gigabytes no longer exhausts the server's memory. The total cap (default 128 MiB) is a new setting, "Max unpacked size (MB)", in the configuration page.
+- **Symbolic links are never followed.** If `plugins/<key>` (or the plugins directory) is a symbolic link, install, replace, restore and clean-up refuse to act instead of emptying the tree the link points to.
+- **A moved tag is detected.** For the latest-tag, pinned-tag and release policies, the commit the tag pointed to (and the SHA-256 of a release asset) is recorded at install time. The download now targets that commit rather than the tag name, and if the same tag later points to other content the install is refused with a clear message ("tag_moved") instead of silently installing it. Publish a new tag to ship a changed release.
+- **Rollback checks the entity.** Restoring a snapshot now requires the right on the source the snapshot belongs to, like the other actions.
+- **No forge call on a plain page view.** The confirm page shows the last checked state; resolving the exact ref and the changelog (which uses the source's token) only happens when a user allowed to install presses "Review install / update".
+- **One source per plugin key.** Registering a source for a plugin key already managed by another source, in any entity, is refused.
+
 ## [1.0.7] - 2026-10-10
 
 Reinstall after copying the files (`plugin:install` then `plugin:activate`), no
