@@ -96,6 +96,22 @@ final class PluginGitpluginsConfig
         return $this->getMaxDownloadMb() * 1024 * 1024;
     }
 
+    /**
+     * Max total UNPACKED bytes of one archive (MB, clamped 16..1024; default 128).
+     * WHY: the download cap bounds the compressed bytes only — this bounds what an
+     * archive may expand to on disk.
+     */
+    public function getMaxExtractMb(): int
+    {
+        return max(16, min(1024, (int) ($this->row['max_extract_mb'] ?? 128)));
+    }
+
+    /** Max unpacked archive size in bytes. */
+    public function getMaxExtractBytes(): int
+    {
+        return $this->getMaxExtractMb() * 1024 * 1024;
+    }
+
     /** Per-fetch network timeout in seconds (clamped 5..300). */
     public function getFetchTimeoutSeconds(): int
     {
@@ -301,6 +317,7 @@ final class PluginGitpluginsConfig
             'allow_auto_install'     => isset($post['allow_auto_install']) ? 1 : 0,
             'allow_downgrade'        => isset($post['allow_downgrade']) ? 1 : 0,
             'max_download_mb'        => max(1, min(500, (int) ($post['max_download_mb'] ?? 50))),
+            'max_extract_mb'         => max(16, min(1024, (int) ($post['max_extract_mb'] ?? 128))),
             'fetch_timeout_seconds'  => max(5, min(300, (int) ($post['fetch_timeout_seconds'] ?? 30))),
             'check_frequency_minutes' => max(5, min(40320, (int) ($post['check_frequency_minutes'] ?? 1440))),
             'notify_updates'         => isset($post['notify_updates']) ? 1 : 0,

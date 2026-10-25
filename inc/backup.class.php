@@ -174,6 +174,12 @@ final class PluginGitpluginsBackup
         }
         $target = rtrim($pluginsBase, '/') . '/' . $key;
 
+        // WHY: never restore through a symbolic link — rrmdir/rename would act
+        // on the tree the link points to (see Extractor::targetIsLink).
+        if (PluginGitpluginsExtractor::targetIsLink($pluginsBase, $key)) {
+            return false;
+        }
+
         // Extract into a fresh temp dir first, then atomically swap into place —
         // so a half-extracted tree never becomes the live plugin.
         $tmpBase = defined('GLPI_TMP_DIR') ? GLPI_TMP_DIR : sys_get_temp_dir();

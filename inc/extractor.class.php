@@ -19,8 +19,17 @@ final class PluginGitpluginsExtractor
     /** Max entries an archive may hold (a GLPI plugin is a few hundred to a few thousand). */
     public const MAX_ENTRIES = 20000;
 
-    /** Max total UNCOMPRESSED bytes written by one extraction (256 MiB). */
-    public const MAX_TOTAL_BYTES = 268435456;
+    /** Max total UNCOMPRESSED bytes written by one extraction (128 MiB; configurable, see Config::getMaxExtractBytes). */
+    public const MAX_TOTAL_BYTES = 134217728;
+
+    /** Max UNCOMPRESSED bytes of ONE entry (32 MiB) — a plugin file is never larger. */
+    public const MAX_ENTRY_BYTES = 33554432;
+
+    /** Read/write granularity when streaming (bounds the memory of every copy loop). */
+    private const CHUNK = 65536;
+
+    /** Compressed-side granularity: inflate output per call is at most ~1032x this. */
+    private const INFLATE_CHUNK = 8192;
 
     /**
      * PURE: does an extraction stay within budget? WHY: the download cap bounds
@@ -119,6 +128,161 @@ final class PluginGitpluginsExtractor
     }
 
     /**
+     * PURE: does this 512-byte block look like a tar header (POSIX "ustar" magic)?
+     */
+    public static function isTarHeader(string $block): bool
+    {
+        return strlen($block) >= 512 && substr($block, 257, 5) === 'ustar';
+    }
+
+    /**
+     * Largest tar byte stream a gzip may inflate to for a given budget: the
+     * payload cap plus the per-entry tar framing (header + padding, doubled for
+     * pax/long-name records) and the end-of-archive blocks.
+     */
+    public static function maxTarBytes(int $maxEntries, int $maxBytes): int
+    {
+        return $maxBytes + ($maxEntries * 2048) + 8192;
+    }
+
+    /**
+     * Sniff the REAL format of $archive from its magic bytes (never from its
+     * name — fetch() names every download ".tar.gz") and stage it under $workDir
+     * under a name the driver understands. Only zip, tar and tar.gz are accepted;
+     * a gzip is inflated to a plain tar on DISK through a bounded stream.
+     *
+     * WHY: the bundled library inflates a whole tar.gz into memory when it opens
+     * it (a 190 KB tar.gz of zeros cost 217 MB at open), and it also opens rar,
+     * 7z, iso, cab through external binaries. Deciding the format and bounding
+     * the decompressed size BEFORE the library sees the file closes both. A
+     * plain tar is read lazily by the driver, so memory stays flat.
+     *
+     * @return array{format:string,path:string} format is 'zip' or 'tar'
+     * @throws \RuntimeException('extract_failed') on an unexpected format or a bomb
+     */
+    public static function stageArchive(string $archive, string $workDir, int $maxEntries, int $maxBytes): array
+    {
+        $in = @fopen($archive, 'rb');
+        if ($in === false) {
+            throw new \RuntimeException('extract_failed');
+        }
+
+        try {
+            $head = (string) fread($in, 512);
+
+            // zip: the driver streams entries; sizes are enforced while copying.
+            if (strncmp($head, "PK\x03\x04", 4) === 0 || strncmp($head, "PK\x05\x06", 4) === 0) {
+                return ['format' => 'zip', 'path' => self::copyBounded($in, $workDir . '/in.zip', self::maxTarBytes($maxEntries, $maxBytes))];
+            }
+
+            // plain tar.
+            if (self::isTarHeader($head)) {
+                return ['format' => 'tar', 'path' => self::copyBounded($in, $workDir . '/in.tar', self::maxTarBytes($maxEntries, $maxBytes))];
+            }
+
+            // gzip → must contain a tar; inflate to disk, counting real bytes.
+            if (strncmp($head, "\x1f\x8b", 2) === 0 && function_exists('inflate_init')) {
+                return ['format' => 'tar', 'path' => self::inflateTarBounded($in, $head, $workDir . '/in.tar', self::maxTarBytes($maxEntries, $maxBytes))];
+            }
+        } finally {
+            fclose($in);
+        }
+
+        // rar, 7z, iso, cab, bz2, xz, … or garbage: not a format we expect.
+        throw new \RuntimeException('extract_failed');
+    }
+
+    /** Copy an already-open stream (first 512 bytes consumed) to $dest, refusing past $cap bytes. */
+    private static function copyBounded($in, string $dest, int $cap): string
+    {
+        rewind($in);
+        $out = @fopen($dest, 'wb');
+        if ($out === false) {
+            throw new \RuntimeException('extract_failed');
+        }
+        $total = 0;
+        try {
+            while (!feof($in)) {
+                $buf = fread($in, self::CHUNK);
+                if ($buf === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+                $total += strlen($buf);
+                // WHY: refuse as soon as the real size passes the cap.
+                if ($total > $cap || fwrite($out, $buf) === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+            }
+        } finally {
+            fclose($out);
+        }
+
+        return $dest;
+    }
+
+    /**
+     * Stream-inflate a gzip into $dest, never holding more than one small
+     * chunk's output in memory and refusing as soon as the REAL decompressed
+     * size passes $cap or the payload is not a tar.
+     */
+    private static function inflateTarBounded($in, string $head, string $dest, int $cap): string
+    {
+        rewind($in);
+        $ctx = inflate_init(ZLIB_ENCODING_GZIP);
+        $out = @fopen($dest, 'wb');
+        if ($ctx === false || $out === false) {
+            throw new \RuntimeException('extract_failed');
+        }
+        $total   = 0;
+        $first   = '';
+        $checked = false;
+        try {
+            $feed = static function (string $data) use (&$total, &$first, &$checked, $cap, $out): void {
+                $total += strlen($data);
+                // WHY: the declared gzip size is a trailer the sender controls;
+                // only the bytes really produced are trusted.
+                if ($total > $cap) {
+                    throw new \RuntimeException('extract_failed');
+                }
+                if (!$checked) {
+                    $first .= $data;
+                    if (strlen($first) >= 512) {
+                        // A gzip that is not a tar must not reach the tar driver.
+                        if (!self::isTarHeader($first)) {
+                            throw new \RuntimeException('extract_failed');
+                        }
+                        $checked = true;
+                    }
+                }
+                if ($data !== '' && fwrite($out, $data) === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+            };
+            $ended = false;
+            while (!feof($in) && !$ended) {
+                $chunk = fread($in, self::INFLATE_CHUNK);
+                if ($chunk === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+                $data = @inflate_add($ctx, $chunk, ZLIB_NO_FLUSH);
+                if ($data === false) {
+                    throw new \RuntimeException('extract_failed');
+                }
+                $feed($data);
+                $ended = inflate_get_status($ctx) === ZLIB_STREAM_END;
+            }
+            // Truncated stream (never reached its end) or not a tar.
+            if (!$ended || !$checked) {
+                throw new \RuntimeException('extract_failed');
+            }
+        } finally {
+            fclose($out);
+        }
+
+        return $dest;
+    }
+
+    /**
      * Extract $archive into a fresh staging dir, sanitising every entry, then
      * rename the single top dir to $key and verify setup.php. Returns the staged
      * plugin dir path ("<staging>/<key>"). Live-box only (uses the bundled
@@ -133,8 +297,11 @@ final class PluginGitpluginsExtractor
     ): string
     {
         $tmpBase = defined('GLPI_TMP_DIR') ? GLPI_TMP_DIR : sys_get_temp_dir();
-        $staging = $tmpBase . '/gitplugins_x_' . bin2hex(random_bytes(8));
-        if (!@mkdir($staging, 0o750, true)) {
+        $stem    = $tmpBase . '/gitplugins_x_' . bin2hex(random_bytes(8));
+        $staging = $stem;
+        $work    = $stem . '_src'; // the format-checked copy the library opens
+        if (!@mkdir($staging, 0o750, true) || !@mkdir($work, 0o750, true)) {
+            @rmdir($staging);
             throw new \RuntimeException('extract_failed');
         }
 
@@ -142,8 +309,11 @@ final class PluginGitpluginsExtractor
             if (!class_exists('\\wapmorgan\\UnifiedArchive\\UnifiedArchive')) {
                 throw new \RuntimeException('extract_failed');
             }
-            $arc = \wapmorgan\UnifiedArchive\UnifiedArchive::open($archive);
-            if ($arc === null) {
+            // WHY: format allowlist + bounded decompression happen before the
+            // library parses anything (see stageArchive).
+            $prepared = self::stageArchive($archive, $work, $maxEntries, $maxBytes);
+            $arc = \wapmorgan\UnifiedArchive\UnifiedArchive::open($prepared['path']);
+            if ($arc === null || !method_exists($arc, 'getFormat') || $arc->getFormat() !== $prepared['format']) {
                 throw new \RuntimeException('extract_failed');
             }
 
@@ -191,17 +361,40 @@ final class PluginGitpluginsExtractor
                     continue;
                 }
                 @mkdir(dirname($absTarget), 0o750, true);
-                $content = $arc->getFileContent((string) $name);
-                if ($content === false) {
+                // WHY: stream the entry in small chunks instead of loading it
+                // whole — one huge entry can no longer exhaust the memory limit,
+                // and the real size is bounded per entry and in total.
+                $in = $arc->getFileStream((string) $name);
+                if (!is_resource($in)) {
                     throw new \RuntimeException('extract_failed');
                 }
-                // Declared sizes can lie: also bound what is really produced.
-                $written += strlen((string) $content);
-                if (!self::withinBudget(count($names), $written, $maxEntries, $maxBytes)) {
+                $out = @fopen($absTarget, 'wb');
+                if ($out === false) {
+                    fclose($in);
                     throw new \RuntimeException('extract_failed');
                 }
-                if (file_put_contents($absTarget, $content) === false) {
-                    throw new \RuntimeException('extract_failed');
+                $entryBytes = 0;
+                $entryCap   = min(self::MAX_ENTRY_BYTES, $maxBytes);
+                try {
+                    while (!feof($in)) {
+                        $buf = fread($in, self::CHUNK);
+                        if ($buf === false) {
+                            throw new \RuntimeException('extract_failed');
+                        }
+                        $entryBytes += strlen($buf);
+                        // Declared sizes can lie: bound what is really produced.
+                        $written += strlen($buf);
+                        if ($entryBytes > $entryCap
+                            || !self::withinBudget(count($names), $written, $maxEntries, $maxBytes)) {
+                            throw new \RuntimeException('extract_failed');
+                        }
+                        if ($buf !== '' && fwrite($out, $buf) === false) {
+                            throw new \RuntimeException('extract_failed');
+                        }
+                    }
+                } finally {
+                    fclose($in);
+                    fclose($out);
                 }
             }
 
@@ -226,6 +419,8 @@ final class PluginGitpluginsExtractor
         } catch (\Throwable $e) {
             self::rrmdir($staging);
             throw new \RuntimeException('extract_failed');
+        } finally {
+            self::rrmdir($work); // the staged copy of the archive is never kept
         }
     }
 
@@ -260,6 +455,11 @@ final class PluginGitpluginsExtractor
         $base    = rtrim($pluginsBase, '/');
         $target  = $base . '/' . $key;
         $holding = null;
+
+        // WHY: never replace through a symbolic link (see targetIsLink).
+        if (self::targetIsLink($base, $key)) {
+            throw new \RuntimeException('place_failed');
+        }
 
         if (is_dir($target)) {
             $holding = $base . '/.gitplugins_swap_' . bin2hex(random_bytes(8));
@@ -309,6 +509,19 @@ final class PluginGitpluginsExtractor
         return $backupZip; // null if zipping failed (rollback then unavailable)
     }
 
+    /**
+     * PURE-ish (lstat only): is the plugins dir, or plugins/<key>, a symbolic link?
+     * WHY: rename()/rrmdir() on a link act on the link or follow it to a tree
+     * outside plugins/ (a dev checkout, another volume): an update would empty
+     * that tree. We never act through a link — refuse instead.
+     */
+    public static function targetIsLink(string $pluginsBase, string $key): bool
+    {
+        $base = rtrim($pluginsBase, '/');
+
+        return is_link($base) || is_link($base . '/' . $key);
+    }
+
     /** Top-level entry names (dirs + files) of a directory. */
     public static function topEntries(string $dir): array
     {
@@ -326,6 +539,13 @@ final class PluginGitpluginsExtractor
     /** Recursive rmdir (best-effort cleanup of temp/backup dirs). */
     public static function rrmdir(string $dir): void
     {
+        // WHY: is_dir() follows a link; removing "the directory" behind a link
+        // would empty a tree we do not own. Drop the link itself, never its target.
+        if (is_link($dir)) {
+            @unlink($dir);
+
+            return;
+        }
         if (!is_dir($dir)) {
             @unlink($dir);
 

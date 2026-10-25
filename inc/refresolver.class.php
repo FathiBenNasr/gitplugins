@@ -413,4 +413,20 @@ final class PluginGitpluginsRefResolver
 
         return str_replace(["\r", "\n", "\0"], '', trim($sha));
     }
+
+    /**
+     * The commit SHA a tag entry of the "list tags" API points to — PURE.
+     * GitHub: {name, commit:{sha}}; Gitea/Forgejo/GitLab: {name, commit:{id|sha}}.
+     * '' unless it is a full hex SHA (40 or 64 chars): anything else is not a
+     * fingerprint we can compare.
+     *
+     * @param array<string,mixed> $entry one decoded tag object
+     */
+    public static function tagCommitSha(array $entry): string
+    {
+        $commit = $entry['commit'] ?? null;
+        $sha    = is_array($commit) ? strtolower(trim((string) ($commit['sha'] ?? $commit['id'] ?? ''))) : '';
+
+        return preg_match('/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/', $sha) === 1 ? $sha : '';
+    }
 }

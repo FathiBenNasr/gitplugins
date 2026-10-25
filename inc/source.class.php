@@ -164,6 +164,20 @@ class PluginGitpluginsSource extends CommonDBTM
 
                 return false;
             }
+            // WHY: a plugin key names ONE directory of the server, whatever the
+            // entity: a source of another entity (or of the same one) that already
+            // manages it must not be shadowed or hijacked. Checked on the model so
+            // the form, the API and massive actions all get it.
+            $newKey = (string) ($checked['data']['plugin_key'] ?? '');
+            if ($newKey !== '' && self::keyIsTakenByAnother($newKey, (int) ($current['id'] ?? 0))) {
+                Session::addMessageAfterRedirect(
+                    htmlspecialchars(__('This plugin key is already managed by another source.', 'gitplugins'), ENT_QUOTES),
+                    false,
+                    ERROR
+                );
+
+                return false;
+            }
             $input = array_merge($input, $checked['data']);
         }
         unset($input['source_type']);
@@ -187,6 +201,25 @@ class PluginGitpluginsSource extends CommonDBTM
         unset($input['_clear_credential']);
 
         return $input;
+    }
+
+    /**
+     * Does a source other than #$ownId already manage this plugin key? Looks at
+     * EVERY entity (no entity filter on purpose) and answers only yes/no, so
+     * nothing about the other source is disclosed.
+     */
+    public static function keyIsTakenByAnother(string $key, int $ownId): bool
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        foreach ($DB->request(['SELECT' => ['id'], 'FROM' => self::getTable(), 'WHERE' => ['plugin_key' => $key]]) as $row) {
+            if ((int) ($row['id'] ?? 0) !== $ownId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Localised type name (singular/plural) for GLPI UI labels. */

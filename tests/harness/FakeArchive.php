@@ -22,10 +22,21 @@ namespace wapmorgan\UnifiedArchive {
         public static array $actual = [];
         /** @var string[] entries whose content was read */
         public static array $reads = [];
+        /** Format the driver reports for the file it was handed. */
+        public static string $format = 'tar';
+        /** @var string[] files the library was asked to open (proves what reached it) */
+        public static array $opened = [];
 
         public static function open(string $file): ?self
         {
+            self::$opened[] = $file;
+
             return new self();
+        }
+
+        public function getFormat(): string
+        {
+            return self::$format;
         }
 
         /** @return string[] */
@@ -37,6 +48,22 @@ namespace wapmorgan\UnifiedArchive {
         public function getFileData(string $name): object
         {
             return (object) ['uncompressedSize' => self::$declared[$name] ?? 0];
+        }
+
+        /** @return resource */
+        public function getFileStream(string $name)
+        {
+            self::$reads[] = $name;
+            $h = fopen('php://temp', 'w+b');
+            $left = self::$actual[$name] ?? 1;
+            while ($left > 0) {
+                $n = min($left, 65536);
+                fwrite($h, str_repeat('A', $n));
+                $left -= $n;
+            }
+            rewind($h);
+
+            return $h;
         }
 
         public function getFileContent(string $name): string
