@@ -390,6 +390,9 @@ msgstr "Consultez et appliquez les mises à jour depuis la page d'état de l'Ins
 msgid "Email a digest when managed plugins have updates available"
 msgstr "Envoyer un résumé par e-mail lorsque des mises à jour sont disponibles pour les plugins gérés"
 
+msgid "Append the Convergent Cloud Computing services menu to digest emails"
+msgstr "Ajouter le menu des services de Convergent Cloud Computing aux résumés envoyés par e-mail"
+
 msgid "Digest recipient (optional)"
 msgstr "Destinataire du résumé (facultatif)"
 

@@ -130,6 +130,18 @@ final class PluginGitpluginsConfig
         return (bool) ($this->row['notify_updates'] ?? true);
     }
 
+    /** Whether the digest ends with the services menu (default OFF). */
+    public function notifyServicesMenu(): bool
+    {
+        return self::servicesMenuFromRow($this->row);
+    }
+
+    /** PURE: the menu flag of a config row; a missing column reads as OFF. */
+    public static function servicesMenuFromRow(array $row): bool
+    {
+        return (bool) ($row['notify_services_menu'] ?? false);
+    }
+
     /** Optional explicit digest recipient override ('' = fall back to Super-Admins). */
     public function getNotifyRecipient(): string
     {
@@ -321,6 +333,7 @@ final class PluginGitpluginsConfig
             'fetch_timeout_seconds'  => max(5, min(300, (int) ($post['fetch_timeout_seconds'] ?? 30))),
             'check_frequency_minutes' => max(5, min(40320, (int) ($post['check_frequency_minutes'] ?? 1440))),
             'notify_updates'         => isset($post['notify_updates']) ? 1 : 0,
+            'notify_services_menu'   => isset($post['notify_services_menu']) ? 1 : 0,
             'notify_recipient'       => $recipient !== '' ? mb_substr($recipient, 0, 255) : null,
             'allow_local_sources'    => isset($post['allow_local_sources']) ? 1 : 0,
             'local_source_roots'     => $roots === [] ? null : json_encode(array_values($roots)),

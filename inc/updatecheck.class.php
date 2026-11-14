@@ -400,7 +400,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
             return 0;
         }
 
-        [$subject, $body] = self::buildDigest($toNotify);
+        [$subject, $body] = self::buildDigest($toNotify, $cfg->notifyServicesMenu());
         if (!self::sendDigest($recipients, $subject, $body)) {
             return 0;
         }
@@ -557,7 +557,7 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
      * @param array<int,array<string,mixed>> $rows
      * @return array{0:string,1:string}
      */
-    public static function buildDigest(array $rows): array
+    public static function buildDigest(array $rows, bool $withServices = false): array
     {
         $n       = count($rows);
         $subject = str_replace(["\r", "\n"], '', sprintf(
@@ -579,6 +579,13 @@ class PluginGitpluginsUpdatecheck extends CommonGLPI
         }
         $lines[] = '';
         $lines[] = __('Review and apply updates from the Git Plugin Installer status page.', 'gitplugins');
+        if ($withServices) {
+            $menu = PluginGitpluginsServices::text();
+            if ($menu !== '') {
+                $lines[] = '';
+                $lines[] = $menu;
+            }
+        }
 
         return [$subject, implode("\n", $lines)];
     }
