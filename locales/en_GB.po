@@ -390,6 +390,9 @@ msgstr "Review and apply updates from the Git Plugin Installer status page."
 msgid "Email a digest when managed plugins have updates available"
 msgstr "Email a digest when managed plugins have updates available"
 
+msgid "Append the Convergent Cloud Computing services menu to digest emails"
+msgstr "Append the Convergent Cloud Computing services menu to digest emails"
+
 msgid "Digest recipient (optional)"
 msgstr "Digest recipient (optional)"
 

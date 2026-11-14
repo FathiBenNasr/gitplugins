@@ -5,6 +5,13 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-11-14
+
+GLPI 12 line: carries 1.0.9 of the GLPI 11 line (below): an optional services
+menu at the end of the update digest, off by default. Reinstall after copying the
+files (`plugin:install` then `plugin:activate`): it adds one column to the
+configuration table.
+
 ## [1.1.4] - 2026-10-25
 
 GLPI 12 line: carries 1.0.8 of the GLPI 11 line (below): bounded archive opening,
@@ -35,6 +42,19 @@ Security release for the GLPI 12 line: carries every fix of 1.0.4 below (October
 - **Requires GLPI 12.0** (min 12.0.0, max 12.99.99); the 11.x line stays on the previous minor.
 - Class properties inherited from GLPI carry the native types GLPI 12 declares (`public static string $rightname`, …): an untyped redeclaration is a compile error that takes the whole GLPI instance down.
 - CSRF: no more `_glpi_csrf_token` fields, `Session::getNewCSRFToken()`/`checkCSRF()` calls or `X-Glpi-Csrf-Token` headers. GLPI 12 validates the browser's `Sec-Fetch-Site`/`Origin` headers instead.
+## [1.0.9] - 2026-11-14
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`): it
+adds one column to the configuration table.
+
+### Added
+- **Optional services menu in the update digest.** A new switch on the
+  configuration page, *Append the Convergent Cloud Computing services menu to
+  digest emails*, ends the digest with the publisher's services, one link per
+  line. It is **off by default**: an install that does not turn it on sends
+  exactly the same digest as before. A menu entry pointing outside the
+  publisher's own domains drops the whole menu rather than send a foreign link.
+
 ## [1.0.8] - 2026-10-25
 
 Hardening release. Reinstall after copying the files (`plugin:install` then
