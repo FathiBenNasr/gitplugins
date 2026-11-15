@@ -99,7 +99,6 @@ Details: [docs/ADMINISTRATION.en.md](docs/ADMINISTRATION.en.md#configuration).
 | Max unpacked size | 128 MB (16–1024) | cap on the total unpacked size |
 | Fetch timeout | 30 s (5–300) | network timeout |
 | Update-check frequency | 1440 min (5–40320) | cadence of the check |
-| Allow automatic (unattended) install on update | off | leave off to confirm before installing |
 | Allow downgrading | off | downgrades are refused unless enabled |
 | Email digest | on | message when updates are available |
 | Digest recipient | empty | otherwise active Super-Admins, then GLPI's administration address |

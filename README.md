@@ -106,7 +106,6 @@ jour). Détail : [docs/ADMINISTRATION.md](docs/ADMINISTRATION.md#configuration).
 | Taille maximale décompressée | 128 Mo (16–1024) | plafond du total décompressé |
 | Délai d'expiration du téléchargement | 30 s (5–300) | délai réseau |
 | Fréquence de vérification des mises à jour | 1440 min (5–40320) | cadence de la vérification |
-| Installation automatique lors d'une mise à jour | désactivée | à laisser désactivée pour confirmer avant d'installer |
 | Rétrogradation vers une version antérieure | désactivée | refusée tant que le réglage n'est pas activé |
 | Résumé par courriel | activé | message quand des mises à jour sont disponibles |
 | Destinataire du résumé | vide | à défaut : les Super-Admin actifs, puis l'adresse d'administration de GLPI |

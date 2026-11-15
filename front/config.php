@@ -59,10 +59,6 @@ $csrf   = Session::getNewCSRFToken();
       </div>
     </div>
     <div class="form-check form-switch mb-2">
-      <input class="form-check-input" type="checkbox" name="allow_auto_install" id="aai"<?= $config->allowAutoInstall() ? ' checked' : '' ?>>
-      <label class="form-check-label" for="aai"><?= htmlspecialchars(__('Allow automatic (unattended) install on update — leave OFF for confirm-before-install', 'gitplugins')) ?></label>
-    </div>
-    <div class="form-check form-switch mb-2">
       <input class="form-check-input" type="checkbox" name="allow_downgrade" id="adg"<?= $config->allowDowngrade() ? ' checked' : '' ?>>
       <label class="form-check-label" for="adg"><?= htmlspecialchars(__('Allow downgrading to an older version (not recommended)', 'gitplugins')) ?></label>
     </div>

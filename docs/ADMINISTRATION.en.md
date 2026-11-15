@@ -61,7 +61,6 @@ single-row table `glpi_plugin_gitplugins_config`. They take effect immediately, 
 | **Max unpacked size (MB)** | 128 (16–1024) | cap on the total unpacked size |
 | **Fetch timeout (seconds)** | 30 (5–300) | network timeout |
 | **Update-check frequency (minutes)** | 1440 (5–40320) | cadence of the update check |
-| **Allow automatic (unattended) install on update** | off | leave off (to be verified: see [Known gaps](SECURITE.md#écarts-connus), in French) |
 | **Allow downgrading to an older version** | off | an older version is refused otherwise |
 | **Email a digest when managed plugins have updates available** | on | sends the digest |
 | **Append the Convergent Cloud Computing services menu to digest emails** | off | appends a menu of publisher links at the end of the digest; a link outside its domains removes the whole menu |

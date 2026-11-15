@@ -5,6 +5,23 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.10] - 2026-11-16
+
+Reinstall after copying the files (`plugin:install` then `plugin:activate`). No schema change.
+
+### Removed
+- **The "Allow automatic (unattended) install on update" switch.** No code ever performed an
+  unattended install: every install and update was, and still is, confirmed by a person. The
+  switch suggested otherwise, so it is gone from the configuration page; the column stays for
+  schema stability, its value is ignored and reset to 0 on the next save.
+
+### Documentation
+- `docs/SCHEMA.md` describes all nine tables (it covered five): `catalog`, `known_issues`,
+  `snapshots` and `targets` are added.
+
+### Tests
+- `ConfigTest`: the switch is not offered, a stored 1 enables nothing, saving resets it.
+
 ## [1.0.9] - 2026-11-14
 
 Reinstall after copying the files (`plugin:install` then `plugin:activate`): it

@@ -97,8 +97,7 @@ sequenceDiagram
 ## Modèle de données
 
 Neuf tables, sans clé étrangère déclarée (convention GLPI : liens logiques, jointures en PHP). Détail
-colonne par colonne : [SCHEMA.md](SCHEMA.md) (rédigé avant l'ajout des cinq dernières tables ; à
-compléter).
+colonne par colonne : [SCHEMA.md](SCHEMA.md) (les neuf tables, à jour depuis la 1.0.10).
 
 ```mermaid
 erDiagram
@@ -203,8 +202,8 @@ emplacements du greffon (source, production-test, Forgejo) sont décrits dans
   [SECURITE.md](SECURITE.md).
 - **Tests** : 290 tests, dont des mutations qui prouvent que chaque garde échoue quand on la retire
   (`tests/mutations/`).
-- **Dette connue** : [SCHEMA.md](SCHEMA.md) est en retard ; le réglage d'installation automatique n'a
-  pas de consommateur évident (voir [SECURITE.md](SECURITE.md#écarts-connus)).
+- **Installation sans confirmation** : jamais. Le réglage qui la suggérait n'avait aucun effet ; il est
+  retiré de la page de configuration depuis la 1.0.10, et sa colonne est ignorée.
 
 ## Glossaire
 

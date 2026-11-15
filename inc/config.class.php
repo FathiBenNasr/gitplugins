@@ -72,10 +72,14 @@ final class PluginGitpluginsConfig
         return array_values($out);
     }
 
-    /** Whether the cron worker may auto-install/update without manual approval. */
+    /**
+     * Unattended install is not implemented: every install and update is confirmed by a
+     * person (1.0.10). The column stays for schema stability, but its value is ignored and
+     * the switch is no longer offered — it used to suggest a behaviour that never existed.
+     */
     public function allowAutoInstall(): bool
     {
-        return (bool) ($this->row['allow_auto_install'] ?? false);
+        return false;
     }
 
     /** Whether installing a version older than the installed one is permitted. */
@@ -326,7 +330,7 @@ final class PluginGitpluginsConfig
 
         $data = [
             'allowed_hosts'          => json_encode(array_values($hosts)),
-            'allow_auto_install'     => isset($post['allow_auto_install']) ? 1 : 0,
+            'allow_auto_install'     => 0, // never honoured, see allowAutoInstall()
             'allow_downgrade'        => isset($post['allow_downgrade']) ? 1 : 0,
             'max_download_mb'        => max(1, min(500, (int) ($post['max_download_mb'] ?? 50))),
             'max_extract_mb'         => max(16, min(1024, (int) ($post['max_extract_mb'] ?? 128))),

@@ -120,13 +120,9 @@ chaque garde y est retirée du code, et un test doit échouer.
 
 - **Aucune vérification de signature du code amont** (voir plus haut). Pistes : exiger un tag signé ou
   un fichier de somme de contrôle publié séparément, pour les sources qui le fournissent.
-- **Réglage « installation automatique »** : il est enregistré et affiché, mais le code relu pour cette
-  documentation n'en tient pas compte pour déclencher une installation sans confirmation (**à
-  vérifier**). Ne pas compter dessus ni l'activer.
 - **Anonymisation du journal** à la suppression d'un utilisateur de GLPI : à vérifier.
 - **Réseau sortant** : le greffon ne filtre que par nom d'hôte et adresse résolue ; un pare-feu
   sortant côté serveur reste recommandé.
-- **`SCHEMA.md`** décrit encore quatre tables sur neuf.
 
 ## Signalement
 

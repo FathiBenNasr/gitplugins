@@ -64,7 +64,6 @@ redémarrage.
 | **Max unpacked size (MB)** | 128 (16–1024) | plafond du total décompressé |
 | **Fetch timeout (seconds)** | 30 (5–300) | délai réseau |
 | **Update-check frequency (minutes)** | 1440 (5–40320) | cadence de la vérification des mises à jour |
-| **Allow automatic (unattended) install on update** | désactivé | à laisser désactivé (à vérifier : voir [Écarts connus](SECURITE.md#écarts-connus)) |
 | **Allow downgrading to an older version** | désactivé | une version plus ancienne est refusée sinon |
 | **Email a digest when managed plugins have updates available** | activé | envoi du résumé |
 | **Append the Convergent Cloud Computing services menu to digest emails** | désactivé | ajoute un menu de liens du fournisseur à la fin du résumé ; tout lien hors de ses domaines supprime le menu entier |
