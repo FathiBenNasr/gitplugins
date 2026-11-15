@@ -68,7 +68,7 @@ The plugin directory **must** be named `gitplugins`. Full procedure:
 
 ```bash
 cd <glpi>/plugins
-git clone https://git.convergent.tn/fbennasr/GLPI-gitplugins.git gitplugins
+git clone https://github.com/FathiBenNasr/gitplugins.git gitplugins
 cd <glpi>
 sudo -u www-data php bin/console plugin:install gitplugins
 sudo -u www-data php bin/console plugin:activate gitplugins
