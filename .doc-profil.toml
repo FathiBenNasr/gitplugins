@@ -1,0 +1,8 @@
+# Profil de documentation, lu par audit_doc.py (dépôt convergent-modele-doc).
+# Il dit quelles exigences du standard s'appliquent à ce dépôt : voir docs/STANDARD.md.
+
+profil = "greffon"          # greffon | application | service | documents | hors-perimetre
+parent = "glpi"             # glpi | snappymail | cyrus | aucun
+interface = true            # sources, plugins installés, état, configuration, mise à jour groupée
+modele_donnees = true       # neuf tables glpi_plugin_gitplugins_*
+licence = "GPL-2.0-or-later"
