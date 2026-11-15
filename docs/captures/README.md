@@ -1,8 +1,7 @@
 # Captures d'écran
 
 Produites par le banc navigateur (`capture.js`, Puppeteer + Chrome dans le conteneur
-`puppeteer-test`) contre le banc GLPI 11 (`http://10.89.20.11`, conteneur `glpi11-web`
-sur le réseau isolé `glpi12_banc`), où la ligne `glpi-11-12` du greffon est installée et
+`puppeteer-test`) contre le banc GLPI 11 (réseau isolé, URL donnée par `GLPI_URL`), où la ligne `glpi-11-12` du greffon est installée et
 active. **Jamais prises à la main.**
 
 | Fichier | Ce qu'il montre |
@@ -12,6 +11,17 @@ active. **Jamais prises à la main.**
 | `03-sources.png` | *Sources* : les sources git gérées — nom, clé du greffon, fournisseur, politique de référence (branche, dernier tag, tag ou SHA épinglé, archive de version) — avec l'action *Install / Update*. |
 | `04-status.png` | *Managed plugin status* : version installée contre version disponible, action en attente, dernière vérification et son résultat, verdict de santé, et les accès *Catalog*, *Targets*, *Bulk update (dry-run)*. |
 | `05-config.png` | La configuration : liste blanche des hôtes (garde SSRF), taille et délai maximaux de téléchargement, fréquence de vérification, installation automatique et rétrogradation (désactivées par défaut), courriel de synthèse, sources locales. |
+| `06-sources-exemple.png` | Trois sources fictives (`exemple…`) suivies avec trois politiques : branche, tag épinglé, dernier tag. |
+| `07-nouvelle-source.png` | Le formulaire *Nouvelle source* : URL du dépôt et bouton *Détecter*, clé du plugin, politique de référence, jeton de dépôt privé. |
+| `08-etat-exemple.png` | L'écran *État* avec trois plugins fictifs, dont un à mettre à jour (ligne jaune et bandeau). |
+| `09-mise-a-jour-groupee.png` | La simulation *Bulk update (dry-run)* : action, migration probable, contrôle préalable, problèmes connus, cases à cocher. |
+
+Les images 01 à 05 sont refaites par `capture.js` (voir plus bas) ; les images 06 à 09 viennent du
+script de manuel du banc, `scripts/manuels/gitplugins.js`, lancé avec les mêmes variables
+d'environnement (`GLPI_URL`, `GLPI_USER`, `GLPI_PASS`) :
+`podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS puppeteer-test node /app/scripts/manuels/gitplugins.js`.
+Leurs données sont entièrement fictives (clés `exemple…`).
+
 
 ## Anonymisation
 
@@ -68,7 +78,7 @@ Les identifiants restent dans l'environnement de l'appelant : `podman exec -e NO
 Aucun mot de passe n'est écrit dans un fichier.
 
 ```bash
-export GLPI_URL=http://10.89.20.11 GLPI_USER=… GLPI_PASS=…
+export GLPI_URL=<url du banc GLPI> GLPI_USER=… GLPI_PASS=…
 export OUT=/app/screenshots/gitplugins
 podman exec puppeteer-test mkdir -p /app/scripts/gitplugins /app/screenshots/gitplugins
 podman cp docs/captures/capture.js puppeteer-test:/app/scripts/gitplugins/capture.js

@@ -5,6 +5,22 @@ All notable changes to **Git Plugin Installer** (`gitplugins`) are documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-11-16
+
+Same change as 1.0.10 on the GLPI 11 line. Reinstall after copying the files. No schema change.
+
+### Removed
+- **The "Allow automatic (unattended) install on update" switch.** No code ever performed an
+  unattended install: every install and update is confirmed by a person. The column stays,
+  its value is ignored and reset to 0 on the next save.
+
+### Documentation
+- `docs/SCHEMA.md` describes all nine tables; the documentation is brought to the standard
+  on this line (ported from `glpi-11-12`, adapted to GLPI 12).
+
+### Tests
+- `ConfigTest`: the switch is not offered, a stored 1 enables nothing, saving resets it.
+
 ## [1.1.5] - 2026-11-14
 
 GLPI 12 line: carries 1.0.9 of the GLPI 11 line (below): an optional services

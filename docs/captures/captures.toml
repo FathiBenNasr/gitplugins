@@ -1,0 +1,85 @@
+# Manifeste des captures de Git Plugin Installer.
+# Une entrée [[capture]] par image de ce dossier. Lu par audit_doc.py, et plus tard par
+# l'assembleur du manuel. Les captures 01 à 05 viennent de capture.js, les 06 à 09 du script
+# de manuel du banc ; ni les unes ni les autres ne sont prises à la main.
+
+[[capture]]
+id = "greffon"
+fichier = "01-plugin.png"
+document = "docs/ADMINISTRATION.md#installation"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
+titre = { fr = "Git Plugin Installer dans la liste des greffons", en = "Git Plugin Installer in the plugin list" }
+alt = { fr = "La tuile de Git Plugin Installer dans Configuration, Plugins, avec son logo, sa licence et sa version", en = "The Git Plugin Installer tile in Setup, Plugins, with its logo, licence and version" }
+
+[[capture]]
+id = "installes"
+fichier = "02-installed.png"
+document = "docs/GUIDE.md#enregistrer-un-plugin-déjà-installé"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
+titre = { fr = "Les plugins installés", en = "Installed plugins" }
+alt = { fr = "Le tableau des plugins installés : état de la source git (gérée, déclarée, sans source), dépôt, référence, fournisseur et actions", en = "The installed plugins table: git source state (managed, declared, no source), repository, reference, provider and actions" }
+
+[[capture]]
+id = "sources"
+fichier = "03-sources.png"
+document = "docs/GUIDE.md#ajouter-une-source"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
+titre = { fr = "Les sources git gérées", en = "Managed git sources" }
+alt = { fr = "La liste des sources git gérées : nom, clé du plugin, fournisseur, politique de référence et action Installer / Mettre à jour", en = "The list of managed git sources: name, plugin key, provider, reference policy and the Install / Update action" }
+
+[[capture]]
+id = "etat-banc"
+fichier = "04-status.png"
+document = "docs/GUIDE.md#consulter-létat-et-repérer-une-mise-à-jour"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
+titre = { fr = "L'état des plugins gérés (banc)", en = "Managed plugin status (bench)" }
+alt = { fr = "Le tableau d'état : version installée contre version disponible, dernière vérification, santé, et les boutons Catalog, Targets et Bulk update", en = "The status table: installed against available version, last check, health, and the Catalog, Targets and Bulk update buttons" }
+
+[[capture]]
+id = "configuration"
+fichier = "05-config.png"
+document = "docs/ADMINISTRATION.md#configuration"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
+titre = { fr = "La page de configuration", en = "The configuration page" }
+alt = { fr = "La page de configuration : hôtes autorisés, plafonds de téléchargement, fréquence de vérification, installation automatique et rétrogradation désactivées, résumé par courriel, sources locales, instantanés, catalogue", en = "The configuration page: allowed hosts, download caps, check frequency, automatic install and downgrade switched off, email digest, local sources, snapshots, catalogue" }
+
+[[capture]]
+id = "sources-exemple"
+fichier = "06-sources-exemple.png"
+document = "docs/GUIDE.md#ajouter-une-source"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS puppeteer-test node /app/scripts/manuels/gitplugins.js"
+titre = { fr = "Des sources d'exemple", en = "Example sources" }
+alt = { fr = "Trois sources fictives suivies avec des politiques différentes : branche, tag épinglé, dernier tag", en = "Three fictitious sources tracked under different policies: branch, pinned tag, latest tag" }
+
+[[capture]]
+id = "nouvelle-source"
+fichier = "07-nouvelle-source.png"
+document = "docs/GUIDE.md#ajouter-une-source"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS puppeteer-test node /app/scripts/manuels/gitplugins.js"
+titre = { fr = "Le formulaire Nouvelle source", en = "The New source form" }
+alt = { fr = "Le formulaire Nouvelle source : nom, URL du dépôt avec le bouton Détecter, clé du plugin, politique de référence, jeton de dépôt privé et case Actif", en = "The New source form: display name, repository URL with the Detect button, plugin key, ref policy, private-repo token and the Active switch" }
+
+[[capture]]
+id = "etat-exemple"
+fichier = "08-etat-exemple.png"
+document = "docs/GUIDE.md#consulter-létat-et-repérer-une-mise-à-jour"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS puppeteer-test node /app/scripts/manuels/gitplugins.js"
+titre = { fr = "L'état avec une mise à jour", en = "Status with an update" }
+alt = { fr = "L'écran d'état avec trois plugins fictifs, dont un dont la version disponible est plus récente, signalé par une ligne jaune et un bandeau", en = "The status screen with three fictitious plugins, one of which has a newer available version, flagged by a yellow row and a banner" }
+
+[[capture]]
+id = "mise-a-jour-groupee"
+fichier = "09-mise-a-jour-groupee.png"
+document = "docs/GUIDE.md#mettre-à-jour-plusieurs-plugins-dun-coup"
+variante = "clair"
+commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS puppeteer-test node /app/scripts/manuels/gitplugins.js"
+titre = { fr = "La mise à jour groupée (simulation)", en = "Bulk update (dry-run)" }
+alt = { fr = "La simulation de mise à jour groupée : action prévue, migration probable, contrôle préalable et problèmes connus de chaque plugin, avec cases à cocher", en = "The bulk update dry-run: planned action, likely migration, preflight and known issues for each plugin, with tick boxes" }

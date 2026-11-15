@@ -8,7 +8,8 @@ available version/SHA of every managed plugin, queues install/update actions for
 a cron worker, and audits every fetch/install/update. Credentials and the SSRF
 host allowlist live in a single-row config.
 
-The schema is four tables, all prefixed `glpi_plugin_gitplugins_`:
+The schema is nine tables, all prefixed `glpi_plugin_gitplugins_` (the source of
+truth is `hook.php`):
 
 - `sources` — a managed repository: URL, detected provider, **ref policy**, and
   a GLPIKey-encrypted credential, entity-scoped.
@@ -16,6 +17,11 @@ The schema is four tables, all prefixed `glpi_plugin_gitplugins_`:
   pending action, one row per source.
 - `logs` — audit of fetch/install/update actions (generic messages, no secrets).
 - `config` — single-row config (SSRF host allowlist, install policy, caps).
+- `catalog` — entries read from one or more catalog manifests (plugins one can add as a source).
+- `known_issues` — compatibility rules and advisories checked before an install.
+- `snapshots` — the backup taken before each new version is put in place, used by rollback.
+- `targets` — remote GLPI instances allowed to pull the signed deploy manifest.
+- `deploy_nonces` — anti-replay store for those pulls.
 
 **No enforced foreign keys.** As with every GLPI plugin, relationships are
 *logical*: `*_id` columns hold the id of a row in another table and the join is
@@ -130,6 +136,42 @@ audit trail outlives the plugin. Every audited line also goes to GLPI's event lo
 `X-Gp-Nonce` is accepted once per target (`UNIQUE (plugin_gitplugins_targets_id, nonce)`);
 rows older than twice the ±300 s freshness window are purged on each pull.
 
+### `glpi_plugin_gitplugins_catalog`
+**Role.** Plugins offered by the configured catalog manifests, so that an admin can add one as a
+source in a click. Each manifest refreshes its own rows (`catalog_source`), independently of the others.
+
+**Relationships.** `plugin_key` joins logically to `sources.plugin_key` once added. No FK.
+
+**Notable columns.** `url` (HTTPS repository, still subject to the SSRF allowlist when used),
+`ref_policy` (recommended), `category`, `description`, `catalog_source`, `updated_at`.
+
+### `glpi_plugin_gitplugins_known_issues`
+**Role.** Rules checked before an install: a bad peer combination (`conflict`), a peer
+present but outside its required range (`min_peer`), or a free-text warning (`advisory`).
+
+**Relationships.** `plugin_key` (or `*` for every plugin) and `peer_key` join logically to plugin keys.
+
+**Notable columns.** `version_range` / `peer_range` (comparator syntax, empty = any), `kind`,
+`message` (generic, no secrets), `source` (`builtin` seed or a catalog id; refreshed wholesale per source).
+
+### `glpi_plugin_gitplugins_snapshots`
+**Role.** One row per backup taken before a new version is put in place: the version it replaces,
+its commit, the inert file archive kept outside the web tree, and, when captured, a gzipped dump of
+the plugin's own tables. Rollback restores from it; how many are kept is set in the configuration.
+
+**Relationships.** `plugin_gitplugins_sources_id` → `sources.id` (N:1, nullable); `plugin_key` joins logically.
+
+**Notable columns.** `version`, `sha`, `files_archive_path`, `db_dump_path`, `date_creation`.
+
+### `glpi_plugin_gitplugins_targets`
+**Role.** Remote GLPI instances of the pull deploy model: a target authenticates its requests with
+an HMAC over a shared secret and pulls the deploy manifest; nothing is pushed to it.
+
+**Relationships.** `deploy_nonces.plugin_gitplugins_targets_id` → `targets.id` (N:1).
+
+**Notable columns.** `name` (UNIQUE, the identifier the target signs with), `base_url`
+(informational), `secret` (**GLPIKey-encrypted**, write-only, never logged), `is_active`, `last_pull_at`.
+
 ### `glpi_plugin_gitplugins_config`
 **Role.** Single-row (id=1) plugin configuration — SSRF host allowlist, install
 policy, and download/timeout caps.
@@ -138,7 +180,9 @@ policy, and download/timeout caps.
 
 **Notable columns.**
 - `allowed_hosts` JSON — host allowlist for the SSRF-guarded fetcher (A10); seeded with GitHub (+ its release-download hosts) and GitLab; add self-hosted hosts via Configuration.
-- `allow_auto_install` / `allow_downgrade` — install policy gates.
+- `allow_downgrade` — install policy gate.
+- `allow_auto_install` — kept for schema stability but **ignored since 1.0.10 / 1.1.6**: every install is
+  confirmed by a person, and the switch is no longer offered.
 - Caps: `max_download_mb` (1..500), `fetch_timeout_seconds` (5..300), `check_frequency_minutes` (5..40320).
 
 ## Relationships summary
@@ -149,3 +193,6 @@ policy, and download/timeout caps.
 - `sources.entities_id` → `glpi_entities.id` (N:1) [core]
 - `logs.users_id` → `glpi_users.id` (N:1, nullable) [core]
 - `installs.plugin_key` / `sources.plugin_key` ↔ `glpi_plugins` (core, read-only discovery of on-disk plugins)
+- `snapshots.plugin_gitplugins_sources_id` → `sources.id` (N:1, nullable)
+- `deploy_nonces.plugin_gitplugins_targets_id` → `targets.id` (N:1)
+- `catalog.plugin_key`, `known_issues.plugin_key` / `peer_key` ↔ plugin keys (logical)

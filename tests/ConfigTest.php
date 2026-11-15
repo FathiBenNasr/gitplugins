@@ -28,6 +28,22 @@ final class ConfigTest extends TestCase
         self::assertSame($urls, explode("\n", (string) $stored), 'every URL survives intact');
     }
 
+    public function testUnattendedInstallIsNeitherOfferedNorHonoured(): void
+    {
+        // 1.0.10: the switch suggested an unattended install that no code performed.
+        $page = (string) file_get_contents(__DIR__ . '/../front/config.php');
+        self::assertFalse(str_contains($page, 'name="allow_auto_install"'), 'the switch is still offered');
+
+        $rc  = new ReflectionClass(PluginGitpluginsConfig::class);
+        $cfg = $rc->newInstanceWithoutConstructor();
+        $row = $rc->getProperty('row');
+        $row->setValue($cfg, ['allow_auto_install' => 1]);
+        self::assertFalse($cfg->allowAutoInstall(), 'a stored 1 must not enable anything');
+
+        $src = (string) file_get_contents(__DIR__ . '/../inc/config.class.php');
+        self::assertTrue(str_contains($src, "'allow_auto_install'     => 0,"), 'saving must reset the stored value');
+    }
+
     public function testCatalogUrlColumnDropsInvalidAndEmpty(): void
     {
         self::assertNull(PluginGitpluginsConfig::catalogUrlColumn(''));
