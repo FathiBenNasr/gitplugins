@@ -6,7 +6,7 @@ Version déployée : **1.0.9**
 
 L'Installateur de plugins Git suit des plugins GLPI hébergés dans des dépôts Git (GitHub, GitLab, Forgejo, Gitea…). Il vérifie régulièrement si une version plus récente existe, vous l'indique dans un écran d'état et dans un courriel de synthèse, puis installe la mise à jour quand vous la confirmez. Avant chaque mise à jour, il conserve une copie de sauvegarde du plugin pour pouvoir revenir en arrière en un clic.
 
-**Important :** installer un plugin exécute le code d'installation de ce plugin sur le serveur. Ne confirmez que des sources de confiance.
+> **Important :** installer un plugin exécute le code d'installation de ce plugin sur le serveur. Ne confirmez que des sources de confiance.
 
 ## Où le trouver
 

@@ -6,7 +6,7 @@ Deployed version: **1.0.9**
 
 The Git Plugin Installer tracks GLPI plugins hosted in Git repositories (GitHub, GitLab, Forgejo, Gitea…). It regularly checks whether a newer version exists, tells you in a status screen and in a digest email, then installs the update when you confirm it. Before each update, it keeps a backup copy of the plugin so you can roll back in one click.
 
-**Important:** installing a plugin runs that plugin's installation code on the server. Only confirm trusted sources.
+> **Important:** installing a plugin runs that plugin's installation code on the server. Only confirm trusted sources.
 
 ## Where to find it
 
