@@ -10,7 +10,7 @@ active. **Jamais prises à la main.**
 | `02-installed.png` | *Installed plugins* : chaque greffon présent sur le disque, lu dans son propre `plugin.xml`, avec l'état de sa source git (*managed*, *declared*, *no source*, *marketplace*), le dépôt, la référence et le fournisseur, et les actions *Add source* / *Register as managed source*. |
 | `03-sources.png` | *Sources* : les sources git gérées — nom, clé du greffon, fournisseur, politique de référence (branche, dernier tag, tag ou SHA épinglé, archive de version) — avec l'action *Install / Update*. |
 | `04-status.png` | *Managed plugin status* : version installée contre version disponible, action en attente, dernière vérification et son résultat, verdict de santé, et les accès *Catalog*, *Targets*, *Bulk update (dry-run)*. |
-| `05-config.png` | La configuration : liste blanche des hôtes (garde SSRF), taille et délai maximaux de téléchargement, fréquence de vérification, installation automatique et rétrogradation (désactivées par défaut), courriel de synthèse, sources locales. |
+| `05-config.png` | La configuration : liste blanche des hôtes (garde SSRF), taille et délai maximaux de téléchargement, fréquence de vérification, rétrogradation (désactivée par défaut), courriel de synthèse, sources locales. |
 | `06-sources-exemple.png` | Trois sources fictives (`exemple…`) suivies avec trois politiques : branche, tag épinglé, dernier tag. |
 | `07-nouvelle-source.png` | Le formulaire *Nouvelle source* : URL du dépôt et bouton *Détecter*, clé du plugin, politique de référence, jeton de dépôt privé. |
 | `08-etat-exemple.png` | L'écran *État* avec trois plugins fictifs, dont un à mettre à jour (ligne jaune et bandeau). |

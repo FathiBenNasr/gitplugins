@@ -46,7 +46,7 @@ document = "docs/ADMINISTRATION.md#configuration"
 variante = "clair"
 commande = "podman exec -e GLPI_URL -e GLPI_USER -e GLPI_PASS -e OUT puppeteer-test node /app/scripts/gitplugins/capture.js"
 titre = { fr = "La page de configuration", en = "The configuration page" }
-alt = { fr = "La page de configuration : hôtes autorisés, plafonds de téléchargement, fréquence de vérification, installation automatique et rétrogradation désactivées, résumé par courriel, sources locales, instantanés, catalogue", en = "The configuration page: allowed hosts, download caps, check frequency, automatic install and downgrade switched off, email digest, local sources, snapshots, catalogue" }
+alt = { fr = "La page de configuration : hôtes autorisés, plafonds de téléchargement, fréquence de vérification, rétrogradation désactivée, résumé par courriel, sources locales, instantanés, catalogue", en = "The configuration page: allowed hosts, download caps, check frequency, downgrade switched off, email digest, local sources, snapshots, catalogue" }
 
 [[capture]]
 id = "sources-exemple"
